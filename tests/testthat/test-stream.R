@@ -1,15 +1,11 @@
 library(testthat)
 
-test_that("start_stream() establishes and closes a connection", {
+test_that("streams open and close", {
   
-  ws <- start_stream(verbose = FALSE)
-  Sys.sleep(5)
-  expect_true(inherits(ws, "WebSocket"))
-  ready_state <- ws$readyState() |> as.vector()
-  expect_equal(ready_state, 1)
+  # Create a new stream
+  stream <- Stream$new(verbose = FALSE)
+  expect_equal(stream$ready_state(), 1)
   
-  ws$close()
-  Sys.sleep(5)
-  ready_state <- ws$readyState() |> as.vector()
-  expect_equal(ready_state, 3)
+  stream$close()
+  expect_equal(stream$ready_state(), 3)
 })
