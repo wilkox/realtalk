@@ -12,6 +12,8 @@ Represents a streaming session with the OpenAI Realtime API
 \item{\code{websocket}}{The websocket::WebSocket object}
 
 \item{\code{verbose}}{Should messages be printed?}
+
+\item{\code{eventlog}}{A log of all sent and received events}
 }
 \if{html}{\out{</div>}}
 }
@@ -59,13 +61,13 @@ printed.}
 }
 \subsection{Returns}{
 A new Stream object
+Send a text message to the stream
 }
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-Stream-send_text"></a>}}
 \if{latex}{\out{\hypertarget{method-Stream-send_text}{}}}
 \subsection{Method \code{send_text()}}{
-Send a text message to the stream
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{Stream$send_text(text, response_modalities = c("text"))}\if{html}{\out{</div>}}
 }

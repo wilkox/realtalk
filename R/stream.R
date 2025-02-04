@@ -11,6 +11,9 @@ Stream <- R6::R6Class("Stream",
     #' @field verbose Should messages be printed?
     verbose = NULL,
 
+    #' @field eventlog A log of all sent and received events
+    eventlog = NULL,
+
     #' @description
     #' Open a streaming connection to OpenAI Realtime API via WebSockets
     #' @param api_key Your long-term OpenAI API key. Defaults to
@@ -30,6 +33,7 @@ Stream <- R6::R6Class("Stream",
     ) {
 
       self$verbose <- verbose
+      self$eventlog <- EventLog$new()
 
       # Create a new WebSocket client
       url <- paste0("wss://api.openai.com/v1/realtime?model=", model)
@@ -60,7 +64,6 @@ Stream <- R6::R6Class("Stream",
 
     },
 
-    #' @description
     #' Send a text message to the stream
     #'
     #' @param text A character string to send.
@@ -95,12 +98,13 @@ Stream <- R6::R6Class("Stream",
     #' @param event The WebSockets event
     receive_event = function(event) {
       data <- jsonlite::fromJSON(event$data)
-      if (self$verbose) cli::cli_alert_info("Received event:\n{jsonlite::toJSON(data, pretty = TRUE)}")
+      Event$new(data) |> self$eventlog$add()
     },
 
     #' @description
     #' Close the stream
     close = function() {
+      do_later_now() # Flush any pending activity before closing to prevent a warning
       self$websocket$close()
       do_later_now()
     },

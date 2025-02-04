@@ -11,10 +11,14 @@ RoxygenNote: 7.3.2
 Imports: 
     audio,
     base64enc,
+    checkmate,
     cli,
+    dplyr,
     httr2,
     jsonlite,
     lemur,
+    lubridate,
+    tibble,
     websocket
 Suggests: 
     testthat (>= 3.0.0)
