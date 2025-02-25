@@ -24,8 +24,15 @@ capture_audio_chunk <- function(duration = 1) {
 #' @param audio_b64 A base64-encoded string representing audio.
 #' @export
 play_audio_chunk <- function(audio_b64) {
-  temp_wav <- tempfile(fileext = ".wav")
-  base64enc::base64decode(audio_b64, temp_wav)
-  audio::play(temp_wav)
-  unlink(temp_wav)
+  audio_binary <- base64enc::base64decode(audio_b64)
+  audio_int <- readBin(
+    audio_binary, 
+    integer(), 
+    n = length(audio_binary)/2,  # 2 bytes per 16-bit sample
+    size = 2,                    # 2 bytes for 16-bit
+    signed = TRUE                # PCM16 is signed
+  )
+  audio::play(audio_int, rate = 24000)
+  duration <- length(audio_binary) / 48000 
+  Sys.sleep(duration)
 }

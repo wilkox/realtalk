@@ -20,6 +20,7 @@ Imports:
     lubridate,
     purrr,
     tibble,
+    tuneR,
     websocket
 Suggests: 
     testthat (>= 3.0.0)

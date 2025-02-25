@@ -1,6 +1,25 @@
 load_all()
 stream <- Stream$new()
-stream$send_text("What is the capital of France?")
-stream$send_text("What is the capital of Xinjiang?")
-stream$send_text("This is a very long message. The purpose of this message is to test the formatting of very long messages in the stream transcript. The content of this message doesn't matter, only that it is long and contains a lot of words. I want you to reply with a similar message that is also long and contains a lot of words so I can test the response side of the transcript formatting.")
-stream$transcript()
+stream$send_text("What is the capital of France?", response_modalities = c("audio", "text"))
+el <- stream$eventlog$as_tibble()
+
+library(tidyverse)
+
+audio_chunks <- el %>%
+  filter(type == "response.audio.delta") %>%
+  pull(data) %>%
+  map(~ .x$delta)
+
+audio_b64 <- audio_chunks[[6]]
+
+  audio_binary <- base64enc::base64decode(audio_b64)
+  audio_int <- readBin(
+    audio_binary, 
+    integer(), 
+    n = length(audio_binary)/2,  # 2 bytes per 16-bit sample
+    size = 2,                    # 2 bytes for 16-bit
+    signed = TRUE                # PCM16 is signed
+  )
+  audio::play(audio_int, rate = 24000)
+
+for (chunk in audio_chunks) { play_audio_chunk(chunk) }
