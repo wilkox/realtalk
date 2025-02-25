@@ -1,0 +1,6 @@
+load_all()
+stream <- Stream$new()
+stream$send_text("What is the capital of France?")
+stream$send_text("What is the capital of Xinjiang?")
+stream$send_text("This is a very long message. The purpose of this message is to test the formatting of very long messages in the stream transcript. The content of this message doesn't matter, only that it is long and contains a lot of words. I want you to reply with a similar message that is also long and contains a lot of words so I can test the response side of the transcript formatting.")
+stream$transcript()

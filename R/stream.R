@@ -15,6 +15,82 @@ Stream <- R6::R6Class("Stream",
     eventlog = NULL,
 
     #' @description
+    #' A transcript of the text and audio conversation so far
+    transcript = function() {
+
+      events <- self$eventlog$as_tibble()
+
+      # Select printable events
+      events <- dplyr::filter(events, type %in% c(
+        "conversation.item.created",
+        "response.text.done",
+        "response.audio_transcript.done"
+      ))
+
+      # Remove conversation.item.created events that were still 'in_progress'
+      events <- dplyr::filter(events, purrr::pmap_lgl(events, function(type, data, ...) {
+        if (type == "conversation.item.created") {
+          return(data$item$status == "completed")
+        } else {
+          return(TRUE)
+        }
+      }))
+
+      # Extract the relevant text
+      events$text <- purrr::pmap_chr(events, function(type, data, ...) {
+        if (type == "conversation.item.created") {
+          return(data$item$content$text)
+        }
+        if (type == "response.text.done") {
+          return(data$text)
+        }
+        cli::cli_abort("I don't know how to extract this type of text!")
+      })
+
+      # Print a neat transcript
+      cli::cli_h1("Transcript")
+
+      # Set up styling functions
+      style_user <- function(text) cli::col_cyan(text)
+      style_other <- function(text) cli::col_green(text)
+  
+      # Calculate console width
+      console_width <- getOption("width", 80)
+      msg_width <- floor(console_width * 0.7)
+  
+      # Display messages
+      for (i in seq_len(nrow(events))) {
+        sender <- events$type[i]
+        message <- events$text[i]
+        
+        # Determine if this is a user message
+        is_user <- sender == "conversation.item.created"
+        
+        # Format and display the message
+        lines <- strwrap(message, width = msg_width)
+        
+        for (line in lines) {
+          if (is_user) {
+            # Right-aligned user message
+            spaces <- console_width - nchar(line)
+            spaces <- max(2, spaces)  # Ensure at least some spacing
+            padding <- strrep(" ", spaces)
+            styled_text <- style_user(line)
+            # Print padded text and styled text separately
+            cat(padding, styled_text, "\n", sep = "")
+          } else {
+            # Left-aligned other message with a small indent
+            cat(style_other(line), "\n", sep = "")
+          }
+        }
+        
+        # Add spacing between messages
+        cat("\n")
+      }
+
+    },
+
+    #' @description
     #' Open a streaming connection to OpenAI Realtime API via WebSockets
     #' @param api_key Your long-term OpenAI API key. Defaults to
     #' `Sys.getenv("OPENAI_API_KEY")`.
@@ -22,14 +98,15 @@ Stream <- R6::R6Class("Stream",
     #' `lemur::openai_api_key()`.
     #' @param voice A character string specifying the voice to use. Defaults to
     #' "verse".
-    #' @param verbose Print messages? Defaults to TRUE. Errors will always be
+    #' @param verbose Print messages? Defaults to FALSE. Errors will always be
     #' printed.
     #' @return A new Stream object
+    #'
     initialize = function(
       api_key = lemur::openai_api_key(verbose = verbose),
       model = "gpt-4o-realtime-preview-2024-12-17",
       voice = "verse",
-      verbose = TRUE
+      verbose = FALSE
     ) {
 
       self$verbose <- verbose
@@ -61,6 +138,16 @@ Stream <- R6::R6Class("Stream",
       # Connect to the websocket server
       self$websocket$connect()
       do_later_now()
+      start_time <- Sys.time()
+      timeout <- 10  # 10 seconds timeout
+      while (self$websocket$readyState() == 0L && difftime(Sys.time(), start_time, units = "secs") < timeout) {
+        Sys.sleep(0.1)
+        do_later_now()
+      }
+      if (self$websocket$readyState() != 1L) {
+        cli::cli_abort("Failed to establish connection after {timeout} seconds")
+      }
+      do_later_now()
 
     },
 
@@ -68,8 +155,13 @@ Stream <- R6::R6Class("Stream",
     #'
     #' @param text A character string to send.
     #' @param response_modalities The modalit(y|ies) that the model should respond
-    #' in. At least one of "text" and "audio". Defaults to text only.
+    #' in. Either "text" or c("audio", "text"). Defaults to text only.
+    #'
     send_text = function(text, response_modalities = c("text")) {
+
+      if (self$websocket$readyState() != 1L) {
+        cli::cli_abort("Stream is not in a ready state")
+      }
 
       # Send the text
       payload <- list(

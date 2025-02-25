@@ -22,6 +22,7 @@ R6 Class Representing a Stream Event
 \itemize{
 \item \href{#method-Event-new}{\code{Event$new()}}
 \item \href{#method-Event-as_tibble}{\code{Event$as_tibble()}}
+\item \href{#method-Event-print}{\code{Event$print()}}
 \item \href{#method-Event-clone}{\code{Event$clone()}}
 }
 }
@@ -54,6 +55,16 @@ Return the event as a tibble
 \subsection{Returns}{
 a tibble
 }
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-Event-print"></a>}}
+\if{latex}{\out{\hypertarget{method-Event-print}{}}}
+\subsection{Method \code{print()}}{
+Print the event
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{Event$print()}\if{html}{\out{</div>}}
+}
+
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-Event-clone"></a>}}

@@ -22,7 +22,18 @@ Event <- R6::R6Class("Event",
     #' Return the event as a tibble
     #' @return a tibble
     as_tibble = function() {
-      tibble::tibble(created_at = self$created_at, type = self$data$type, data = list(self$data))
+      tibble::tibble(
+        created_at = self$created_at,
+        type = self$data$type,
+        data = list(self$data)
+      )
+    },
+
+    #' @description
+    #' Print the event
+    print = function() {
+      cli::cli_h1("Event created at {self$created_at}")
+      print(self$data)
     }
   )
 )

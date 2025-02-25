@@ -14,10 +14,11 @@ Imports:
     checkmate,
     cli,
     dplyr,
-    httr2,
     jsonlite,
+    later,
     lemur,
     lubridate,
+    purrr,
     tibble,
     websocket
 Suggests: 

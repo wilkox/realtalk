@@ -23,3 +23,10 @@ test_that("stream events are logged", {
   stream$close()
 
 })
+
+test_that("sending text and retrieving the stream transcript work", {
+  stream <- Stream$new()
+  expect_no_error(stream$send_text("What is the capital of France?"))
+  expect_no_error(stream$send_text("What is the capital of Xinjiang?"))
+  expect_no_error(invisible(capture.output(capture.output(stream$transcript()), type = "message")))
+})

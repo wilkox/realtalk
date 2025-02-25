@@ -20,6 +20,7 @@ Represents a streaming session with the OpenAI Realtime API
 \section{Methods}{
 \subsection{Public methods}{
 \itemize{
+\item \href{#method-Stream-transcript}{\code{Stream$transcript()}}
 \item \href{#method-Stream-new}{\code{Stream$new()}}
 \item \href{#method-Stream-send_text}{\code{Stream$send_text()}}
 \item \href{#method-Stream-receive_event}{\code{Stream$receive_event()}}
@@ -27,6 +28,16 @@ Represents a streaming session with the OpenAI Realtime API
 \item \href{#method-Stream-ready_state}{\code{Stream$ready_state()}}
 \item \href{#method-Stream-clone}{\code{Stream$clone()}}
 }
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-Stream-transcript"></a>}}
+\if{latex}{\out{\hypertarget{method-Stream-transcript}{}}}
+\subsection{Method \code{transcript()}}{
+A transcript of the text and audio conversation so far
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{Stream$transcript()}\if{html}{\out{</div>}}
+}
+
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-Stream-new"></a>}}
@@ -38,7 +49,7 @@ Open a streaming connection to OpenAI Realtime API via WebSockets
   api_key = lemur::openai_api_key(verbose = verbose),
   model = "gpt-4o-realtime-preview-2024-12-17",
   voice = "verse",
-  verbose = TRUE
+  verbose = FALSE
 )}\if{html}{\out{</div>}}
 }
 
@@ -54,13 +65,14 @@ Open a streaming connection to OpenAI Realtime API via WebSockets
 \item{\code{voice}}{A character string specifying the voice to use. Defaults to
 "verse".}
 
-\item{\code{verbose}}{Print messages? Defaults to TRUE. Errors will always be
+\item{\code{verbose}}{Print messages? Defaults to FALSE. Errors will always be
 printed.}
 }
 \if{html}{\out{</div>}}
 }
 \subsection{Returns}{
 A new Stream object
+
 Send a text message to the stream
 }
 }
@@ -78,7 +90,7 @@ Send a text message to the stream
 \item{\code{text}}{A character string to send.}
 
 \item{\code{response_modalities}}{The modalit(y|ies) that the model should respond
-in. At least one of "text" and "audio". Defaults to text only.}
+in. Either "text" or c("audio", "text"). Defaults to text only.}
 }
 \if{html}{\out{</div>}}
 }
