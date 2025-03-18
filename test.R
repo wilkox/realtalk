@@ -1,11 +1,12 @@
 # Set up session
 load_all()
 stream <- Stream$new()
-# stream$send_text(
-#   "You are the front end for a clinical advice expert system for treating patients with poorly-controlled hypertension. The setting is Australia. A doctor has phoned you to ask for advice. Your role is to be a humane and professional interface to the system. You do not, and are not permitted to, independently provide medical advice or make medical decisions in any way, shape, or form. Instead, you will be communicate with the system backend via passing text messages. The backend will advise you on (for example) what questions to ask and provide you with the answers to any questions the doctor might have. If you do not have an answer provided to you, be open and honest about this; feel free to give a lightly humorous response such as 'I've got the brains trust in the back room working on that one, I'll have an answer for you soon'. Only respond to the doctor with audio. Be friendly and professional. If the doctor is unsure how to start the conversation, encourage them to explain the clinical problem, you will be passed more specific questions to ask as appropriate."
-#, role = "system")
-stream$send_text("You are being used to test audio streaming. Engage the user in conversation with short questions and responses. It's important for this testing to get a large volume of short audio messages in both directions.", role = "system")
 eventlog <- stream$eventlog$as_tibble()
+
+# Initial instructions
+stream$send_text(
+  "You are the front end for a clinical advice expert system for treating patients with poorly-controlled hypertension. The setting is Australia. A doctor has phoned you to ask for advice. Your role is to be a humane and professional interface to the system. You do not, and are not permitted to, independently provide medical advice or make medical decisions in any way, shape, or form. Instead, you will be communicate with the system backend via passing text messages. The backend will advise you on (for example) what questions to ask and provide you with the answers to any questions the doctor might have. If you do not have an answer provided to you, be open and honest about this; feel free to give a lightly humorous response such as 'I've got the brains trust in the back room working on that one, I'll have an answer for you soon'. Only respond to the doctor with audio. Be friendly and professional. If the doctor is unsure how to start the conversation, encourage them to explain the clinical problem, you will be passed more specific questions to ask as appropriate."
+, role = "system")
 
 # Initialise buffer directories
 audio_out_tempdir <- fs::path_temp("audio_out")
@@ -48,16 +49,7 @@ audio_in_bg <- callr::r_bg(function(audio_in_tempdir) {
   cli::cli_alert_info("Background audio in loop initiated")
   cli::cli_alert_info("Directory is {audio_in_tempdir}")
 
-  # Main loop
-  i <- 0
-  while (TRUE) {
-
-    audio_chunk <- realtalk::capture_audio_chunk()
-    audio_buffer_file <- fs::file_temp(pattern = lubridate::now() |> as.character(), tmp_dir = audio_in_tempdir)
-    writeLines(audio_chunk, audio_buffer_file)
-    
-    i <- i + 1
-  }
+  realtalk::capture_audio_chunks_to_dir(audio_in_tempdir)
 
 }, args = list(audio_in_tempdir = audio_in_tempdir))
 
@@ -72,8 +64,9 @@ while (TRUE) {
   audio_in_files <- fs::dir_ls(audio_in_tempdir)
   cli::cli_alert_info("There are {length(audio_in_files)} file{?s} in the audio in buffer")
   for (audio_in_file in audio_in_files) {
-    audio_chunk_base64 <- readLines(audio_in_file)
-    stream$send_audio(audio_chunk_base64)
+    audio_chunk_base64 <- readBin(audio_in_file, what = "raw", n = file.info(audio_in_file)$size) |>
+    base64enc::base64encode()
+    if (length(audio_chunk_base64) > 0) stream$send_audio(audio_chunk_base64)
     fs::file_delete(audio_in_file)
   }
 

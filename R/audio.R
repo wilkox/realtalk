@@ -1,14 +1,44 @@
-#' Capture an Audio Chunk and Encode to Base64
-#'
+#' Capture Audio Chunks to a Directory
+#' 
+#' @param dir Directory to write the wav files to
 #' @param duration Duration in seconds to record (default 1 sec).
 #' @param bitrate Bitrate in Hz (default 24000)
-#' @return A base64-encoded string of the recorded audio.
+#'
 #' @export
-capture_audio_chunk <- function(duration = 1, rate = 24000) {
+capture_audio_chunks_to_dir <- function(dir, duration = 1, bitrate = 24000) {
+  cli::cli_alert_info("Capturing audio chunks to directory {dir}")
 
-  # Create a temporary file
-  temp_wav <- tempfile(fileext = ".wav")
-  
+  if (! fs::dir_exists(dir)) {
+    cli::cli_alert_info("Creating directory {dir}")
+    fs::dir_create(dir)
+  }
+
+  audio_in_wav <- fs::path(dir, "audio_in", ext = "wav")
+  sox_args <- c(
+    "-q",
+    "-t", "coreaudio", "default",
+    "-b", "16",
+    "-r", as.character(bitrate),
+    "-c", "1",
+    paste0("\"", audio_in_wav, "\""),
+    "silence", "1", "0.01", "1%", "1", "0.5", "1%",
+    ":", "newfile",
+    ":", "restart" 
+  )
+  system2("sox", sox_args, stderr = TRUE)
+}
+
+
+#' Capture an Audio Chunk to File
+#'
+#' @param file File to write to
+#' @param duration Duration in seconds to record (default 1 sec).
+#' @param bitrate Bitrate in Hz (default 24000)
+#'
+#' @export
+capture_audio_chunk_file <- function(file, duration = 1, bitrate = 24000) {
+  cli::cli_alert_info("Capturing to file {file}")
+
   # Use sox with specific device settings
   # -q: quiet mode
   # -b 16: 16-bit depth
@@ -17,11 +47,32 @@ capture_audio_chunk <- function(duration = 1, rate = 24000) {
   # -d: default audio input device
   
   # First attempt with sox using default device
-  sox_args <- c("-q", "-t", "coreaudio", "default", 
-                "-b", "16", "-r", as.character(rate), "-c", "1",
-                temp_wav, "trim", "0", as.character(duration))
+  sox_args <- c(
+    "-q",
+    "-t", "coreaudio", "default",
+    "-b", "16",
+    "-r", as.character(bitrate),
+    "-c", "1",
+    paste0("\"", file, "\""),
+    "trim", "0", as.character(duration)
+  )
   
   system2("sox", sox_args, stderr = FALSE)
+}
+
+#' Capture an Audio Chunk and Encode to Base64
+#'
+#' @param duration Duration in seconds to record (default 1 sec).
+#' @param bitrate Bitrate in Hz (default 24000)
+#' @return A base64-encoded string of the recorded audio.
+#' @export
+capture_audio_chunk_base64 <- function(duration = 1, bitrate = 24000) {
+
+  # Create a temporary file
+  temp_wav <- tempfile(fileext = ".wav")
+  
+  # Capture audio
+  capture_audio_chunk_file(temp_wav, duration = duration, bitrate = bitrate)
   
   # Encode the WAV file
   audio_b64 <- base64enc::base64encode(temp_wav)
