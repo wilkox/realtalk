@@ -22,6 +22,7 @@ Represents a streaming session with the OpenAI Realtime API
 \itemize{
 \item \href{#method-Stream-transcript}{\code{Stream$transcript()}}
 \item \href{#method-Stream-new}{\code{Stream$new()}}
+\item \href{#method-Stream-send_audio}{\code{Stream$send_audio()}}
 \item \href{#method-Stream-send_text}{\code{Stream$send_text()}}
 \item \href{#method-Stream-receive_event}{\code{Stream$receive_event()}}
 \item \href{#method-Stream-close}{\code{Stream$close()}}
@@ -73,7 +74,25 @@ printed.}
 \subsection{Returns}{
 A new Stream object
 
-Send a text message to the stream
+Send an audio message to the stream
+}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-Stream-send_audio"></a>}}
+\if{latex}{\out{\hypertarget{method-Stream-send_audio}{}}}
+\subsection{Method \code{send_audio()}}{
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{Stream$send_audio(audio)}\if{html}{\out{</div>}}
+}
+
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{audio}}{The base64-encoded audio
+
+Send a text message to the stream}
+}
+\if{html}{\out{</div>}}
 }
 }
 \if{html}{\out{<hr>}}
@@ -81,7 +100,7 @@ Send a text message to the stream
 \if{latex}{\out{\hypertarget{method-Stream-send_text}{}}}
 \subsection{Method \code{send_text()}}{
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{Stream$send_text(text, response_modalities = c("text"))}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{Stream$send_text(text, response_modalities = c("text"), role = "user")}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
@@ -91,6 +110,8 @@ Send a text message to the stream
 
 \item{\code{response_modalities}}{The modalit(y|ies) that the model should respond
 in. Either "text" or c("audio", "text"). Defaults to text only.}
+
+\item{\code{role}}{The role, either "user" (default) or "system".}
 }
 \if{html}{\out{</div>}}
 }

@@ -151,13 +151,34 @@ Stream <- R6::R6Class("Stream",
 
     },
 
+    #' Send an audio message to the stream
+    #'
+    #' @param audio The base64-encoded audio
+    #'
+    send_audio = function(audio) {
+
+      if (self$websocket$readyState() != 1L) {
+        cli::cli_abort("Stream is not in a ready state")
+      }
+
+      # Send the audio, there is no need to commit or trigger a response as
+      # this happens automatically in VAD mode
+      payload <- list(
+        type = jsonlite::unbox("input_audio_buffer.append"),
+        audio = jsonlite::unbox(audio)
+      )
+      self$websocket$send(jsonlite::toJSON(payload, auto_unbox = FALSE))
+
+    },
+
     #' Send a text message to the stream
     #'
     #' @param text A character string to send.
     #' @param response_modalities The modalit(y|ies) that the model should respond
     #' in. Either "text" or c("audio", "text"). Defaults to text only.
+    #' @param role The role, either "user" (default) or "system".
     #'
-    send_text = function(text, response_modalities = c("text")) {
+    send_text = function(text, response_modalities = c("text"), role = "user") {
 
       if (self$websocket$readyState() != 1L) {
         cli::cli_abort("Stream is not in a ready state")
@@ -168,7 +189,7 @@ Stream <- R6::R6Class("Stream",
         type = jsonlite::unbox("conversation.item.create"),
         item = list(
           type = jsonlite::unbox("message"),
-          role = jsonlite::unbox("user"),
+          role = jsonlite::unbox(role),
           content = list(list(
             type = jsonlite::unbox("input_text"),
             text = jsonlite::unbox(text)

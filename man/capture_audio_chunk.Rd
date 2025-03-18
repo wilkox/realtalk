@@ -4,10 +4,12 @@
 \alias{capture_audio_chunk}
 \title{Capture an Audio Chunk and Encode to Base64}
 \usage{
-capture_audio_chunk(duration = 1)
+capture_audio_chunk(duration = 1, rate = 24000)
 }
 \arguments{
 \item{duration}{Duration in seconds to record (default 1 sec).}
+
+\item{bitrate}{Bitrate in Hz (default 24000)}
 }
 \value{
 A base64-encoded string of the recorded audio.

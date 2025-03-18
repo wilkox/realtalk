@@ -4,10 +4,12 @@
 \alias{play_audio_chunk}
 \title{Decode Base64 Audio and Play It}
 \usage{
-play_audio_chunk(audio_b64)
+play_audio_chunk(audio_b64, bitrate = 24000)
 }
 \arguments{
 \item{audio_b64}{A base64-encoded string representing audio.}
+
+\item{bitrate}{Bitrate in Hz (default 24000).}
 }
 \description{
 Decode Base64 Audio and Play It
