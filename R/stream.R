@@ -44,66 +44,77 @@ Stream <- R6::R6Class("Stream",
         }
       }))
 
-      # Extract the relevant text
-      events$text <- purrr::pmap_chr(events, function(type, data, ...) {
+      # Determine the role, medium, and content
+      events$message <- purrr::pmap(events, function(type, data, ...) {
         if (type == "conversation.item.created") {
-          return(data$item$content$text)
+          return(list(
+            role = ifelse(
+              "roll" %in% names(data$item),
+              data$item$roll,
+              "system"
+            ),
+            medium = "text",
+            content = data$item$content$text
+          ))
         }
         if (type == "response.text.done") {
-          return(jsonlite::fromJSON(data$text)$text)
+          return(list(
+            role = "assistant",
+            medium = "text",
+            content = data$text
+          ))
         }
         if (type == "conversation.item.input_audio_transcription.completed") {
-          return(data$transcript)
+          return(list(
+            role = "user",
+            medium = "audio",
+            content = data$transcript
+          ))
         }
         if (type == "response.audio_transcript.done") {
-          return(data$transcript)
+          return(list(
+            role = "assistant",
+            medium = "audio",
+            content = data$transcript
+          ))
         }
 
         return(glue::glue("I don't know how to extract this type of text! Type is {type}"))
       })
 
+      # Tidy up
+      transcript <- events$message |>
+        purrr::map(tibble::as_tibble) |>
+        dplyr::bind_rows()
+
       # Print a neat transcript
       cli::cli_h1("Transcript")
+      cli::cli_alert_info("Messages may appear out of order due to delays in transcription")
 
-      # Set up styling functions
-      style_user <- function(text) cli::col_cyan(text)
-      style_other <- function(text) cli::col_green(text)
-  
-      # Calculate console width
-      console_width <- getOption("width", 80)
-      msg_width <- floor(console_width * 0.7)
-  
       # Display messages
-      for (i in seq_len(nrow(events))) {
-        sender <- events$type[i]
-        message <- events$text[i]
-        
-        # Determine if this is a user message
-        is_user <- sender %in% c(
-          "conversation.item.created",
-          "conversation.item.input_audio_transcription.completed"
-        )
-        
-        # Format and display the message
-        lines <- strwrap(message, width = msg_width)
-        
-        for (line in lines) {
-          if (is_user) {
-            # Right-aligned user message
-            spaces <- console_width - nchar(line)
-            spaces <- max(2, spaces)  # Ensure at least some spacing
-            padding <- strrep(" ", spaces)
-            styled_text <- style_user(line)
-            # Print padded text and styled text separately
-            cat(padding, styled_text, "\n", sep = "")
-          } else {
-            # Left-aligned other message with a small indent
-            cat(style_other(line), "\n", sep = "")
-          }
+      for (i in seq_len(nrow(transcript))) {
+
+        message <- transcript[i, ]
+
+        # Select styling function
+        if (message$role == "system") {
+          style_f <- function(text) cli::col_white(text)
+        } else if (message$role == "user") {
+          style_f <- function(text) cli::col_red(text)
+        } else if (message$role == "assistant") {
+          style_f <- function(text) cli::col_cyan(text)
+        } else {
+          cli::abort("Don't know how to style role {role}")
         }
-        
-        # Add spacing between messages
-        cat("\n")
+
+        cli::cli_h2(style_f(paste0(
+          stringr::str_to_title(message$role),
+          " [",
+          stringr::str_to_title(message$medium),
+          "]"
+        )))
+
+        cli::cli_text(style_f(message$content))
       }
 
     },
@@ -115,7 +126,7 @@ Stream <- R6::R6Class("Stream",
     #' @param model A character string specifying the model. Defaults to
     #' `lemur::openai_api_key()`.
     #' @param voice A character string specifying the voice to use. Defaults to
-    #' "verse".
+    #' "ballad".
     #' @param verbose Print messages? Defaults to FALSE. Errors will always be
     #' printed.
     #' @return A new Stream object
@@ -123,7 +134,7 @@ Stream <- R6::R6Class("Stream",
     initialize = function(
       api_key = lemur::openai_api_key(verbose = verbose),
       model = "gpt-4o-realtime-preview-2024-12-17",
-      voice = "verse",
+      voice = "ballad",
       verbose = FALSE
     ) {
 
