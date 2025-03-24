@@ -22,15 +22,23 @@ Stream <- R6::R6Class("Stream",
 
       # Select printable events
       events <- dplyr::filter(events, type %in% c(
-        "conversation.item.created",
-        "response.text.done",
-        "response.audio_transcript.done"
+        "conversation.item.created", # Text in
+        "response.text.done", # Text out
+        "conversation.item.input_audio_transcription.completed", # Audio in
+                                                                 # (transcript)
+        "response.audio_transcript.done" # Audio out (transcript)
       ))
 
-      # Remove conversation.item.created events that were still 'in_progress'
+      # conversation.item.created events must have:
+      # - status "completed"
+      # - "text" content
+      # - "text" content must not be empty
       events <- dplyr::filter(events, purrr::pmap_lgl(events, function(type, data, ...) {
         if (type == "conversation.item.created") {
-          return(data$item$status == "completed")
+          if (! data$item$status == "completed") return(FALSE)
+          if (! "text" %in% names(data$item$content)) return(FALSE)
+          if (stringr::str_length(data$item$content$text) == 0) return(FALSE)
+          return(TRUE)
         } else {
           return(TRUE)
         }
@@ -42,7 +50,10 @@ Stream <- R6::R6Class("Stream",
           return(data$item$content$text)
         }
         if (type == "response.text.done") {
-          return(data$text)
+          return(jsonlite::fromJSON(data$text)$text)
+        }
+        if (type == "conversation.item.input_audio_transcription.completed") {
+          return(data$transcript)
         }
         if (type == "response.audio_transcript.done") {
           return(data$transcript)
@@ -68,7 +79,10 @@ Stream <- R6::R6Class("Stream",
         message <- events$text[i]
         
         # Determine if this is a user message
-        is_user <- sender == "conversation.item.created"
+        is_user <- sender %in% c(
+          "conversation.item.created",
+          "conversation.item.input_audio_transcription.completed"
+        )
         
         # Format and display the message
         lines <- strwrap(message, width = msg_width)
@@ -151,6 +165,20 @@ Stream <- R6::R6Class("Stream",
       if (self$websocket$readyState() != 1L) {
         cli::cli_abort("Failed to establish connection after {timeout} seconds")
       }
+
+      # Send a session.update event with the voice and triggering audio
+      # transcription
+      payload <- list(
+        type = jsonlite::unbox("session.update"),
+        session = list(
+          voice = jsonlite::unbox(voice),
+          input_audio_transcription = list(
+            model = jsonlite::unbox("whisper-1")
+          )
+        )
+      )
+      self$websocket$send(jsonlite::toJSON(payload, auto_unbox = FALSE))
+
       do_later_now()
 
     },

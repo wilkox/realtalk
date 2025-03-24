@@ -123,6 +123,4 @@ while (TRUE) {
   Sys.sleep(1)
 }
 
-# Report on what happened in audio in loop, once it has finished
-audio_out_bg$read_all_error_lines()
-audio_out_bg$get_result()
+stream$transcript()
