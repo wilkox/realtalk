@@ -1,5 +1,1 @@
-load_all()
-audio_in_tempdir <- fs::path_temp("audio_in")
-fs::dir_create(audio_in_tempdir)
-realtalk::capture_audio_chunks_to_dir(audio_in_tempdir)
-system2("open", audio_in_tempdir)
+

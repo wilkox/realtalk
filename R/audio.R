@@ -25,7 +25,7 @@ capture_audio_chunks_to_dir <- function(dir, duration = 1, bitrate = 24000) {
     ":", "newfile",
     ":", "restart" 
   )
-  system2("sox", sox_args, stderr = TRUE)
+  system2("sox", sox_args, stderr = FALSE)
 }
 
 

@@ -44,7 +44,11 @@ Stream <- R6::R6Class("Stream",
         if (type == "response.text.done") {
           return(data$text)
         }
-        cli::cli_abort("I don't know how to extract this type of text!")
+        if (type == "response.audio_transcript.done") {
+          return(data$transcript)
+        }
+
+        return(glue::glue("I don't know how to extract this type of text! Type is {type}"))
       })
 
       # Print a neat transcript
