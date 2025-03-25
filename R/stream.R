@@ -16,6 +16,16 @@ Stream <- R6::R6Class("Stream",
     #' background process to close
     bg_close_path = NULL,
 
+    #' @field system_text_in_path The path for a temporary file containing the
+    #' text input buffer for the 'system' role. Text written to this file will
+    #' be streamed to the model as messages coming from 'system'.
+    system_text_in_path = NULL,
+
+    #' @field user_text_in_path The path for a temporary file containing the
+    #' text input buffer for the 'user' role. Text written to this file will
+    #' be streamed to the model as messages coming from 'user'.
+    user_text_in_path = NULL,
+
     #' @field eventlog The EventLog for a completed stream. Will be NULL until
     #' stop_streaming() has been called.
     eventlog = NULL,
@@ -151,7 +161,14 @@ Stream <- R6::R6Class("Stream",
 
       # Set up the background process
       self$bg_process <- callr::r_bg(
-        function(api_key, model, voice, bg_close_path) {
+        function(
+          api_key,
+          model,
+          voice,
+          bg_close_path,
+          system_text_in_path,
+          user_text_in_path
+        ) {
 
           # Allow passthrough of cli messages
           options(cli.message_class = "callr_message")
@@ -184,6 +201,7 @@ Stream <- R6::R6Class("Stream",
           
           websocket$onClose(function(event) {
             cli::cli_alert_success("Connection closed.")
+            fs::file_touch(bg_close_path)
           })
           
           # Connect to the websocket server
@@ -283,6 +301,8 @@ Stream <- R6::R6Class("Stream",
           # Main streaming loop
           j <- 0
           audio_in_last_processed_byte <- 0
+          system_text_in_last_processed_line <- 0
+          user_text_in_last_processed_line <- 0
           eventlog_streamed <- eventlog$as_tibble()
           while (TRUE) {
 
@@ -294,6 +314,72 @@ Stream <- R6::R6Class("Stream",
 
             cli::cli_h1("Main loop iteration {j}")
             realtalk::do_later_now()
+
+            # Check if system text in buffer has grown
+            system_text_in_buffer <- readLines(system_text_in_path)
+            cli::cli_alert_info("System text in line count is {system_text_in_buffer |> length()}")
+
+            # If system text in buffer has grown, stream the delta
+            if (length(system_text_in_buffer) > system_text_in_last_processed_line) {
+              new_lines <- system_text_in_buffer[system_text_in_last_processed_line + 1:length(system_text_in_buffer)]
+
+              # Send the text
+              for (line in new_lines) {
+                payload <- list(
+                  type = jsonlite::unbox("conversation.item.create"),
+                  item = list(
+                    type = jsonlite::unbox("message"),
+                    role = jsonlite::unbox("system"),
+                    content = list(list(
+                      type = jsonlite::unbox("input_text"),
+                      text = jsonlite::unbox(line)
+                    ))
+                  )
+                )
+                websocket$send(jsonlite::toJSON(payload, auto_unbox = FALSE))
+              }
+
+              # Trigger a response
+              payload <- list(type = jsonlite::unbox("response.create"))
+              websocket$send(jsonlite::toJSON(payload, auto_unbox = FALSE))
+
+            }
+
+            # Update last processed line
+            system_text_in_last_processed_line <- length(system_text_in_buffer)
+
+            # Check if user text in buffer has grown
+            user_text_in_buffer <- readLines(user_text_in_path)
+            cli::cli_alert_info("User text in line count is {user_text_in_buffer |> length()}")
+
+            # If user text in buffer has grown, stream the delta
+            if (length(user_text_in_buffer) > user_text_in_last_processed_line) {
+              new_lines <- user_text_in_buffer[user_text_in_last_processed_line + 1:length(user_text_in_buffer)]
+
+              for (line in new_lines) {
+                # Send the text
+                payload <- list(
+                  type = jsonlite::unbox("conversation.item.create"),
+                  item = list(
+                    type = jsonlite::unbox("message"),
+                    role = jsonlite::unbox("user"),
+                    content = list(list(
+                      type = jsonlite::unbox("input_text"),
+                      text = jsonlite::unbox(line)
+                    ))
+                  )
+                )
+                websocket$send(jsonlite::toJSON(payload, auto_unbox = FALSE))
+              }
+
+              # Trigger a response
+              payload <- list(type = jsonlite::unbox("response.create"))
+              websocket$send(jsonlite::toJSON(payload, auto_unbox = FALSE))
+
+            }
+
+            # Update last processed line
+            user_text_in_last_processed_line <- length(user_text_in_buffer)
 
             # Check if audio in buffer has grown
             audio_in_buffer_size <- fs::file_size(audio_in_buffer_file)
@@ -317,7 +403,8 @@ Stream <- R6::R6Class("Stream",
 
               # Send to server
               if (websocket$readyState() != 1L) {
-                cli::cli_abort("Stream is not in a ready state")
+                cli::cli_alert_danger("Stream is not in a ready state")
+                return(eventlog)
               }
 
               # Send the audio, there is no need to commit or trigger a response as
@@ -365,7 +452,9 @@ Stream <- R6::R6Class("Stream",
           api_key = api_key,
           model = model,
           voice = voice,
-          bg_close_path = self$bg_close_path
+          bg_close_path = self$bg_close_path,
+          system_text_in_path = self$system_text_in_path,
+          user_text_in_path = self$user_text_in_path
         )
       ) # End of callr::r_bg call for main loop
     },
@@ -407,41 +496,35 @@ Stream <- R6::R6Class("Stream",
       # Set the background close file path
       self$bg_close_path <- fs::file_temp(pattern = "background_close_signal")
 
+      # Set the text input buffer file paths
+      self$system_text_in_path <- fs::file_temp(pattern = "system_text_in")
+      fs::file_touch(self$system_text_in_path)
+      self$user_text_in_path <- fs::file_temp(pattern = "user_text_in")
+      fs::file_touch(self$user_text_in_path)
+
     },
 
     #' Send a text message to the stream
     #'
     #' @param text A character string to send.
-    #' @param response_modalities The modalit(y|ies) that the model should respond
-    #' in. Either "text" or c("audio", "text"). Defaults to text only.
     #' @param role The role, either "user" (default) or "system".
     #'
-    send_text = function(text, response_modalities = c("text"), role = "user") {
+    send_text = function(text, role = "user") {
 
-      if (self$websocket$readyState() != 1L) {
-        cli::cli_abort("Stream is not in a ready state")
+      # Set the buffer path based on the role
+      if (role == "user") {
+        buffer_path <- self$user_text_in_path
+      } else if (role == "system") {
+        buffer_path <- self$system_text_in_path
+      } else {
+        cli::cli_abort("Unrecognised role {role}")
       }
 
-      # Send the text
-      payload <- list(
-        type = jsonlite::unbox("conversation.item.create"),
-        item = list(
-          type = jsonlite::unbox("message"),
-          role = jsonlite::unbox(role),
-          content = list(list(
-            type = jsonlite::unbox("input_text"),
-            text = jsonlite::unbox(text)
-          ))
-        )
-      )
-      self$websocket$send(jsonlite::toJSON(payload, auto_unbox = FALSE))
+      # Append the text to the buffer
+      connection <- file(buffer_path, "at") # "at" is appending in text mode
+      writeLines(text, connection)
+      close(connection)
 
-      # Trigger a response
-      payload <- list(
-        type = jsonlite::unbox("response.create"),
-        response = list(modalities = response_modalities)
-      )
-      self$websocket$send(jsonlite::toJSON(payload, auto_unbox = FALSE))
     },
 
     #' @description

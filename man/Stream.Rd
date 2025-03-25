@@ -17,6 +17,14 @@ and the main streaming loop are instantiated}
 \item{\code{bg_close_path}}{The path for a temporary file used to signal the
 background process to close}
 
+\item{\code{system_text_in_path}}{The path for a temporary file containing the
+text input buffer for the 'system' role. Text written to this file will
+be streamed to the model as messages coming from 'system'.}
+
+\item{\code{user_text_in_path}}{The path for a temporary file containing the
+text input buffer for the 'user' role. Text written to this file will
+be streamed to the model as messages coming from 'user'.}
+
 \item{\code{eventlog}}{The EventLog for a completed stream. Will be NULL until
 stop_streaming() has been called.}
 }
@@ -108,16 +116,13 @@ Send a text message to the stream
 \if{latex}{\out{\hypertarget{method-Stream-send_text}{}}}
 \subsection{Method \code{send_text()}}{
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{Stream$send_text(text, response_modalities = c("text"), role = "user")}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{Stream$send_text(text, role = "user")}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
 \if{html}{\out{<div class="arguments">}}
 \describe{
 \item{\code{text}}{A character string to send.}
-
-\item{\code{response_modalities}}{The modalit(y|ies) that the model should respond
-in. Either "text" or c("audio", "text"). Defaults to text only.}
 
 \item{\code{role}}{The role, either "user" (default) or "system".}
 }
