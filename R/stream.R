@@ -26,6 +26,12 @@ Stream <- R6::R6Class("Stream",
     #' be streamed to the model as messages coming from 'user'.
     user_text_in_path = NULL,
 
+    #' @field text_out_path The path for a temporary file containing the text
+    #' output buffer from the assistant. This allows for reading of the text
+    #' out stream in real time, as the event log is not generated until the
+    #' stream is completed.
+    text_out_path = NULL,
+
     #' @field eventlog The EventLog for a completed stream. Will be NULL until
     #' stop_streaming() has been called.
     eventlog = NULL,
@@ -69,8 +75,8 @@ Stream <- R6::R6Class("Stream",
         if (type == "conversation.item.created") {
           return(list(
             role = ifelse(
-              "roll" %in% names(data$item),
-              data$item$roll,
+              "role" %in% names(data$item),
+              data$item$role,
               "system"
             ),
             medium = "text",
@@ -141,6 +147,16 @@ Stream <- R6::R6Class("Stream",
 
     #' @description
     #'
+    #' Return all text messages received from the stream in real time. Useful
+    #' for polling for text out while the stream is still running.
+    #'
+    #' @return A list of text messages received
+    text_received = function() {
+      return(readRDS(self$text_out_path))
+    },
+
+    #' @description
+    #'
     #' Open a WebSocket streaming connection to OpenAI Realtime API and begin
     #' bidirectional audio streaming. The streaming loop will be encapsulated
     #' in a callr subprocess, which is stored in the bg_process slot.
@@ -167,7 +183,8 @@ Stream <- R6::R6Class("Stream",
           voice,
           bg_close_path,
           system_text_in_path,
-          user_text_in_path
+          user_text_in_path,
+          text_out_path
         ) {
 
           # Allow passthrough of cli messages
@@ -424,6 +441,21 @@ Stream <- R6::R6Class("Stream",
             eventlog_current <- eventlog$as_tibble()
             cli::cli_alert_info("There are {nrow(eventlog_current)} total events")
             eventlog_new <- dplyr::anti_join(eventlog_current, eventlog_streamed, by = dplyr::join_by(created_at, type, data))
+            
+            # Write new text out events to the buffer
+            new_text_out <- eventlog_new |>
+              dplyr::filter(type == "response.text.done")
+            cli::cli_alert_info("There are {nrow(new_text_out)} new text out events")
+            if (nrow(new_text_out) > 0) {
+              new_text_out <- new_text_out |>
+                dplyr::pull(data) |>
+                dplyr::bind_rows() |>
+                dplyr::pull(text) |>
+                as.list()
+              text_received <- readRDS(text_out_path)
+              text_received <- c(text_received, new_text_out)
+              writeRDS(text_received, text_out_path)
+            }
 
             # Write new audio out events to the buffer
             new_audio <- eventlog_new |>
@@ -454,7 +486,8 @@ Stream <- R6::R6Class("Stream",
           voice = voice,
           bg_close_path = self$bg_close_path,
           system_text_in_path = self$system_text_in_path,
-          user_text_in_path = self$user_text_in_path
+          user_text_in_path = self$user_text_in_path,
+          text_out_path = self$text_out_path
         )
       ) # End of callr::r_bg call for main loop
     },
@@ -501,6 +534,11 @@ Stream <- R6::R6Class("Stream",
       fs::file_touch(self$system_text_in_path)
       self$user_text_in_path <- fs::file_temp(pattern = "user_text_in")
       fs::file_touch(self$user_text_in_path)
+
+      # Set the text output buffer file path
+      self$text_out_path <- fs::file_temp(pattern = "text_out", ext = "rds")
+      text_received <- list()
+      saveRDS(text_received, self$text_out_path)
 
     },
 
