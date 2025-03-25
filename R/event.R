@@ -1,5 +1,6 @@
 #' R6 Class Representing a Stream Event
 #'
+#' @export
 Event <- R6::R6Class("Event",
 
   public = list(

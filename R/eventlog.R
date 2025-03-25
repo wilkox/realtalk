@@ -1,5 +1,6 @@
 #' R6 Class Representing a Log of Events in a Stream
 #'
+#' @export
 EventLog <- R6::R6Class("EventLog",
 
   public = list(

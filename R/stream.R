@@ -8,17 +8,16 @@ Stream <- R6::R6Class("Stream",
     #' @field websocket The websocket::WebSocket object
     websocket = NULL,
 
-    #' @field verbose Should messages be printed?
-    verbose = NULL,
-
-    #' @field eventlog A log of all sent and received events
-    eventlog = NULL,
+    #' @field bg_process The callr background R process in which the websocket
+    #' and the main streaming loop are instantiated
+    bg_process = NULL,
 
     #' @description
     #' A transcript of the text and audio conversation so far
     transcript = function() {
 
-      events <- self$eventlog$as_tibble()
+      eventlog <- readRDS(self$eventlog_file)
+      events <- eventlog$as_tibble()
 
       # Select printable events
       events <- dplyr::filter(events, type %in% c(
@@ -120,97 +119,239 @@ Stream <- R6::R6Class("Stream",
     },
 
     #' @description
-    #' Open a streaming connection to OpenAI Realtime API via WebSockets
+    #'
+    #' Open a WebSocket streaming connection to OpenAI Realtime API and begin
+    #' bidirectional audio streaming. The streaming loop will be encapsulated
+    #' in a callr subprocess, which is stored in the bg_process slot.
+    #'
     #' @param api_key Your long-term OpenAI API key. Defaults to
     #' `Sys.getenv("OPENAI_API_KEY")`.
     #' @param model A character string specifying the model. Defaults to
     #' `lemur::openai_api_key()`.
     #' @param voice A character string specifying the voice to use. Defaults to
     #' "ballad".
-    #' @param verbose Print messages? Defaults to FALSE. Errors will always be
-    #' printed.
-    #' @return A new Stream object
+    #' @return No return
     #'
-    initialize = function(
-      api_key = lemur::openai_api_key(verbose = verbose),
+    start_streaming = function(
+      api_key = lemur::openai_api_key(verbose = FALSE),
       model = "gpt-4o-realtime-preview-2024-12-17",
-      voice = "ballad",
-      verbose = FALSE
+      voice = "ballad"
     ) {
 
-      self$verbose <- verbose
-      self$eventlog <- EventLog$new()
+      # Set up the background process
+      self$bg_process <- callr::r_bg(function(api_key, model, voice) {
 
-      # Create a new WebSocket client
-      url <- paste0("wss://api.openai.com/v1/realtime?model=", model)
-      headers <- list(
-        "Authorization" = paste0("Bearer ", api_key),
-        "OpenAI-Beta" = "realtime=v1"
-      )
-      self$websocket <- websocket::WebSocket$new(url, header = headers, autoConnect = FALSE)
-      
-      # Define event callbacks
-      self$websocket$onOpen(function(event) {
-        if (verbose) cli::cli_alert_success("Connected to server.")
-      })
-      
-      self$websocket$onMessage(function(event) { self$receive_event(event) })
-      
-      self$websocket$onError(function(event) {
-        cli::cli_alert_danger("WebSocket error: {event$message}")
-      })
-      
-      self$websocket$onClose(function(event) {
-        if (verbose) cli::cli_alert_success("Connection closed.")
-      })
-      
-      # Connect to the websocket server
-      self$websocket$connect()
-      do_later_now()
-      start_time <- Sys.time()
-      timeout <- 10  # 10 seconds timeout
-      while (self$websocket$readyState() == 0L && difftime(Sys.time(), start_time, units = "secs") < timeout) {
-        Sys.sleep(0.1)
-        do_later_now()
-      }
-      if (self$websocket$readyState() != 1L) {
-        cli::cli_abort("Failed to establish connection after {timeout} seconds")
-      }
+        # Allow passthrough of cli messages
+        options(cli.message_class = "callr_message")
 
-      # Send a session.update event with the voice and triggering audio
-      # transcription
-      payload <- list(
-        type = jsonlite::unbox("session.update"),
-        session = list(
-          voice = jsonlite::unbox(voice),
-          input_audio_transcription = list(
-            model = jsonlite::unbox("whisper-1")
+        # Initialise the event log
+        eventlog <- realtalk::EventLog$new()
+
+        # Create a new WebSocket client
+        url <- paste0("wss://api.openai.com/v1/realtime?model=", model)
+        headers <- list(
+          "Authorization" = paste0("Bearer ", api_key),
+          "OpenAI-Beta" = "realtime=v1"
+        )
+        websocket <- websocket::WebSocket$new(url, header = headers, autoConnect = FALSE)
+        
+        # Define event callbacks
+        websocket$onOpen(function(event) {
+          cli::cli_alert_success("Connected to server.")
+        })
+        
+        websocket$onMessage(function(event) {
+          data <- jsonlite::fromJSON(event$data)
+          event <- realtalk::Event$new(data) 
+          eventlog$add(event)
+        })
+        
+        websocket$onError(function(event) {
+          cli::cli_alert_danger("WebSocket error: {event$message}")
+        })
+        
+        websocket$onClose(function(event) {
+          cli::cli_alert_success("Connection closed.")
+        })
+        
+        # Connect to the websocket server
+        websocket$connect()
+        realtalk::do_later_now()
+        start_time <- Sys.time()
+        timeout <- 10  # 10 seconds timeout
+        while (websocket$readyState() == 0L && difftime(Sys.time(), start_time, units = "secs") < timeout) {
+          Sys.sleep(0.1)
+          realtalk::do_later_now()
+        }
+        if (websocket$readyState() != 1L) {
+          cli::cli_abort("Failed to establish connection after {timeout} seconds")
+        }
+
+        # Send a session.update event with the voice and triggering audio
+        # transcription
+        payload <- list(
+          type = jsonlite::unbox("session.update"),
+          session = list(
+            voice = jsonlite::unbox(voice),
+            input_audio_transcription = list(
+              model = jsonlite::unbox("whisper-1")
+            )
           )
         )
-      )
-      self$websocket$send(jsonlite::toJSON(payload, auto_unbox = FALSE))
+        websocket$send(jsonlite::toJSON(payload, auto_unbox = FALSE))
 
-      do_later_now()
+        # Flush the future queue
+        realtalk::do_later_now()
+
+        # Initialise audio buffers
+        audio_out_tempdir <- fs::path_temp("audio_out")
+        fs::dir_create(audio_out_tempdir)
+        audio_in_buffer_file <- fs::file_temp(pattern = "audio_out_buffer", ext = "wav")
+
+        # Background function to catch and play streamed audio out
+        audio_out_outfile <- fs::file_temp()
+        audio_out_errfile <- fs::file_temp()
+        audio_out_bg <- callr::r_bg(
+          function(audio_out_tempdir) {
+            cli::cli_alert_info("Background audio out loop initiated")
+            cli::cli_alert_info("Directory is {audio_out_tempdir}")
+
+            # Main loop
+            while (TRUE) {
+
+              audio_files_in_buffer <- fs::dir_ls(audio_out_tempdir)
+              cli::cli_alert_info("There are {length(audio_files_in_buffer)} files in the audio in buffer")
+              if (length(audio_files_in_buffer) > 0) {
+                cli::cli_alert_info("Reading, concatenating, and playing audio files...")
+                purrr::map(audio_files_in_buffer, readLines) |>
+                  paste0() |>
+                  realtalk::play_audio_chunk()
+                cli::cli_alert_info("Deleting played files...")
+                fs::file_delete(audio_files_in_buffer)
+              }
+              
+              Sys.sleep(0.2)
+            }
+          }, 
+          args = list(audio_out_tempdir = audio_out_tempdir),
+          stdout = audio_out_outfile,
+          stderr = audio_out_errfile
+        )
+
+        # Initiate sox streaming of audio in to buffer file
+        sox_bg_process <- callr::r_bg(function(audio_in_buffer_file) {
+          sox_args <- c(
+            "-q", # Quiet mode
+            "-t", "coreaudio", "default",
+            "-b", "16", # 16-bit depth
+            "-r", "24000", # 24 kHz sample rate
+            "-c", "1", # 1 channel (mono)
+            audio_in_buffer_file
+          )
+          system2("sox", sox_args, stderr = FALSE)
+        }, args = list(audio_in_buffer_file))
+
+        # Wait for sox to begin working
+        sox_timer <- 0
+        sox_timeout <- 10
+        sox_polling_interval <- 0.1
+        while (TRUE) {
+          if (fs::file_exists(audio_in_buffer_file)) {
+            if (fs::file_size(audio_in_buffer_file) > 0) break
+          }
+          cli::cli_alert_info("Waiting for sox...")
+          sox_timer <- sox_timer + sox_polling_interval
+          if (sox_timer >= sox_timeout) {
+            cli::cli_abort("Timed out waiting for sox after {sox_timer} seconds")
+          }
+          Sys.sleep(sox_polling_interval)
+        }
+        cli::cli_alert_info("sox is recording")
+
+        # Main loop handles stream events
+        j <- 0
+        audio_in_last_processed_byte <- 0
+        eventlog_streamed <- eventlog$as_tibble()
+        while (TRUE) {
+
+          cli::cli_h1("Main loop iteration {j}")
+          realtalk::do_later_now()
+
+          # Check if audio in buffer has grown
+          audio_in_buffer_size <- fs::file_size(audio_in_buffer_file)
+          cli::cli_alert_info("Audio in buffer size is {audio_in_buffer_size}")
+
+          # If audio in buffer has grown, stream the delta
+          if (audio_in_buffer_size > audio_in_last_processed_byte) {
+
+            # Open connection to the file and read the new binary data
+            connection <- file(audio_in_buffer_file, "rb") # "rb" reads in binary mode
+            seek(connection, audio_in_last_processed_byte)
+            new_audio_bin <- readBin(
+              connection,
+              "raw",
+              audio_in_buffer_size - audio_in_last_processed_byte
+            )
+            close(connection)
+
+            # Encode the new audio data as base64
+            new_audio_b64 <- base64enc::base64encode(new_audio_bin)
+
+            # Send to server
+            if (websocket$readyState() != 1L) {
+              cli::cli_abort("Stream is not in a ready state")
+            }
+
+            # Send the audio, there is no need to commit or trigger a response as
+            # this happens automatically in VAD mode
+            payload <- list(
+              type = jsonlite::unbox("input_audio_buffer.append"),
+              audio = jsonlite::unbox(new_audio_b64)
+            )
+            websocket$send(jsonlite::toJSON(payload, auto_unbox = FALSE))
+            cli::cli_alert_info("{length(new_audio_bin)} bits streamed from audio in buffer")
+
+            # Update the last processed position
+            audio_in_last_processed_byte <- audio_in_buffer_size
+          }
+
+          # Check event log for updates
+          eventlog_current <- eventlog$as_tibble()
+          cli::cli_alert_info("There are {nrow(eventlog_current)} total events")
+          eventlog_new <- dplyr::anti_join(eventlog_current, eventlog_streamed, by = dplyr::join_by(created_at, type, data))
+
+          # Write new audio out events to the buffer
+          new_audio <- eventlog_new |>
+            dplyr::filter(type == "response.audio.delta") 
+          cli::cli_alert_info("There are {nrow(new_audio)} new audio out events")
+          if (nrow(new_audio) > 0) {
+            new_audio <- new_audio |>
+              dplyr::pull(data) |>
+              dplyr::bind_rows() |>
+              dplyr::pull(delta) |>
+              paste0(collapse = "")
+            if (stringr::str_length(new_audio) > 0) {
+              audio_buffer_file <- fs::file_temp(pattern = lubridate::now() |> as.character(), tmp_dir = audio_out_tempdir)
+              writeLines(new_audio, audio_buffer_file)
+            }
+          }
+
+          # Update the eventlog
+          eventlog_streamed <- eventlog_current
+
+          j <- j + 1
+          Sys.sleep(1)
+        } # End of main streaming loop
+
+      }, args = list(api_key = api_key, model = model, voice = voice))
 
     },
 
-    #' Send an audio message to the stream
+    #' @description
     #'
-    #' @param audio The base64-encoded audio
+    #' Set up the Stream object
     #'
-    send_audio = function(audio) {
-
-      if (self$websocket$readyState() != 1L) {
-        cli::cli_abort("Stream is not in a ready state")
-      }
-
-      # Send the audio, there is no need to commit or trigger a response as
-      # this happens automatically in VAD mode
-      payload <- list(
-        type = jsonlite::unbox("input_audio_buffer.append"),
-        audio = jsonlite::unbox(audio)
-      )
-      self$websocket$send(jsonlite::toJSON(payload, auto_unbox = FALSE))
+    initialize = function() {
 
     },
 
@@ -250,19 +391,11 @@ Stream <- R6::R6Class("Stream",
     },
 
     #' @description
-    #' Receive and process an event from the stream
-    #' @param event The WebSockets event
-    receive_event = function(event) {
-      data <- jsonlite::fromJSON(event$data)
-      Event$new(data) |> self$eventlog$add()
-    },
-
-    #' @description
     #' Close the stream
     close = function() {
-      do_later_now() # Flush any pending activity before closing to prevent a warning
+      realtalk::do_later_now() # Flush any pending activity before closing to prevent a warning
       self$websocket$close()
-      do_later_now()
+      realtalk::do_later_now()
     },
 
     #' @description
@@ -270,7 +403,7 @@ Stream <- R6::R6Class("Stream",
     #' @return An integer representing the state of the connection: 0L =
     #' Connecting, 1L = Open, 2L = Closing, 3L = Closed.
     ready_state = function() {
-      do_later_now()
+      realtalk::do_later_now()
       self$websocket$readyState() |> as.integer()
     }
   )

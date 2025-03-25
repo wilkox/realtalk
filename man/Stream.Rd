@@ -11,9 +11,8 @@ Represents a streaming session with the OpenAI Realtime API
 \describe{
 \item{\code{websocket}}{The websocket::WebSocket object}
 
-\item{\code{verbose}}{Should messages be printed?}
-
-\item{\code{eventlog}}{A log of all sent and received events}
+\item{\code{bg_process}}{The callr background R process in which the websocket
+and the main streaming loop are instantiated}
 }
 \if{html}{\out{</div>}}
 }
@@ -21,10 +20,9 @@ Represents a streaming session with the OpenAI Realtime API
 \subsection{Public methods}{
 \itemize{
 \item \href{#method-Stream-transcript}{\code{Stream$transcript()}}
+\item \href{#method-Stream-start_streaming}{\code{Stream$start_streaming()}}
 \item \href{#method-Stream-new}{\code{Stream$new()}}
-\item \href{#method-Stream-send_audio}{\code{Stream$send_audio()}}
 \item \href{#method-Stream-send_text}{\code{Stream$send_text()}}
-\item \href{#method-Stream-receive_event}{\code{Stream$receive_event()}}
 \item \href{#method-Stream-close}{\code{Stream$close()}}
 \item \href{#method-Stream-ready_state}{\code{Stream$ready_state()}}
 \item \href{#method-Stream-clone}{\code{Stream$clone()}}
@@ -41,16 +39,17 @@ A transcript of the text and audio conversation so far
 
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-Stream-new"></a>}}
-\if{latex}{\out{\hypertarget{method-Stream-new}{}}}
-\subsection{Method \code{new()}}{
-Open a streaming connection to OpenAI Realtime API via WebSockets
+\if{html}{\out{<a id="method-Stream-start_streaming"></a>}}
+\if{latex}{\out{\hypertarget{method-Stream-start_streaming}{}}}
+\subsection{Method \code{start_streaming()}}{
+Open a WebSocket streaming connection to OpenAI Realtime API and begin
+bidirectional audio streaming. The streaming loop will be encapsulated
+in a callr subprocess, which is stored in the bg_process slot.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{Stream$new(
-  api_key = lemur::openai_api_key(verbose = verbose),
+\if{html}{\out{<div class="r">}}\preformatted{Stream$start_streaming(
+  api_key = lemur::openai_api_key(verbose = FALSE),
   model = "gpt-4o-realtime-preview-2024-12-17",
-  voice = "verse",
-  verbose = FALSE
+  voice = "ballad"
 )}\if{html}{\out{</div>}}
 }
 
@@ -64,36 +63,25 @@ Open a streaming connection to OpenAI Realtime API via WebSockets
 \code{lemur::openai_api_key()}.}
 
 \item{\code{voice}}{A character string specifying the voice to use. Defaults to
-"verse".}
-
-\item{\code{verbose}}{Print messages? Defaults to FALSE. Errors will always be
-printed.}
+"ballad".}
 }
 \if{html}{\out{</div>}}
 }
 \subsection{Returns}{
-A new Stream object
-
-Send an audio message to the stream
+No return
 }
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-Stream-send_audio"></a>}}
-\if{latex}{\out{\hypertarget{method-Stream-send_audio}{}}}
-\subsection{Method \code{send_audio()}}{
+\if{html}{\out{<a id="method-Stream-new"></a>}}
+\if{latex}{\out{\hypertarget{method-Stream-new}{}}}
+\subsection{Method \code{new()}}{
+Set up the Stream object
+
+Send a text message to the stream
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{Stream$send_audio(audio)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{Stream$new()}\if{html}{\out{</div>}}
 }
 
-\subsection{Arguments}{
-\if{html}{\out{<div class="arguments">}}
-\describe{
-\item{\code{audio}}{The base64-encoded audio
-
-Send a text message to the stream}
-}
-\if{html}{\out{</div>}}
-}
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-Stream-send_text"></a>}}
@@ -112,23 +100,6 @@ Send a text message to the stream}
 in. Either "text" or c("audio", "text"). Defaults to text only.}
 
 \item{\code{role}}{The role, either "user" (default) or "system".}
-}
-\if{html}{\out{</div>}}
-}
-}
-\if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-Stream-receive_event"></a>}}
-\if{latex}{\out{\hypertarget{method-Stream-receive_event}{}}}
-\subsection{Method \code{receive_event()}}{
-Receive and process an event from the stream
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{Stream$receive_event(event)}\if{html}{\out{</div>}}
-}
-
-\subsection{Arguments}{
-\if{html}{\out{<div class="arguments">}}
-\describe{
-\item{\code{event}}{The WebSockets event}
 }
 \if{html}{\out{</div>}}
 }
