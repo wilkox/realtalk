@@ -11,14 +11,6 @@ stream$start_streaming()
 
 stream$send_text("RxAgent: Ask the doctor what medications the patient is taking.", role = "system")
 
-stream$send_text("RxAgent: Read back these medications and ask the doctor to confirm: amlodipine 5 mg daily, metformin 1000 mg BD", role = "system")
-
-stream$send_text("AllergiesAgent: Ask the doctor if the patient has any allergies", role = "system")
-
-stream$send_text("AllergiesAgent: Read back these allergies and ask the doctor to confirm:
-- ALLERGEN: cats; REACTION: sneezing
-- ALLERGEN: codeine; REACTION: hallucinations", role = "system"
-
 stream$text_received()
 
 stream$stop_streaming()

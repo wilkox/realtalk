@@ -225,7 +225,6 @@ Stream <- R6::R6Class("Stream",
           # Define callback event for WebSocket closing
           websocket$onClose(function(event) {
             cli::cli_alert_success("WebSocket connection closed")
-            fs::file_touch(bg_close_path) # Signal to the main loop to shut down
           })
           
           # Connect to the WebSocket server
@@ -329,24 +328,60 @@ Stream <- R6::R6Class("Stream",
           audio_in_last_processed_byte <- 0
           system_text_in_last_processed_line <- 0
           user_text_in_last_processed_line <- 0
-          eventlog_streamed <- eventlog$as_tibble()
+          eventlog_processed <- eventlog$as_tibble()[0, ]
           while (TRUE) {
+
+            cli::cli_h1("Main loop iteration #{main_loop_i}: {lubridate::now()}")
+            realtalk::do_later_now()
+
+            cli::cli_h2("Performing checks")
 
             # Check if shutdown signal has been sent
             if (fs::file_exists(bg_close_path)) {
               cli::cli_alert_info("Shutdown signal received")
-              return(eventlog)
+              break
+            } else {
+              cli::cli_alert_success("No shutdown signal received")
             }
 
-            cli::cli_h1("Main loop iteration {main_loop_i}")
-            realtalk::do_later_now()
+            # Check that the audio I/O background processes are running
+            if (! audio_out_bg$is_alive()) {
+              cli::cli_alert_danger("audio_out_bg has died, aborting and returning audio_out_bg for analysis")
+              return(audio_out_bg)
+            } else {
+              cli::cli_alert_success("audio_out_bg is running")
+            }
+            if (! sox_bg$is_alive()) {
+              cli::cli_alert_danger("sox_bg has died, aborting and returning sox_bg for analysis")
+              return(sox_bg)
+            } else {
+              cli::cli_alert_success("sox_bg is running")
+            }
+
+            # Check that stream is in a ready state
+            if (websocket$readyState() != 1L) {
+              cli::cli_alert_danger("WebSocket is not in a ready state, aborting and returning eventlog for analysis")
+              return(eventlog)
+            } else {
+              cli::cli_alert_success("WebSocket is in a ready state")
+            }
+
+            cli::cli_h2("Checking event log")
+
+            # Check event log for updates
+            eventlog_current <- eventlog$as_tibble()
+            cli::cli_alert_info("There are {nrow(eventlog_current)} events ({nrow(eventlog_current) - nrow(eventlog_processed)} new)")
+            eventlog_new <- dplyr::anti_join(eventlog_current, eventlog_processed, by = dplyr::join_by(created_at, type, data))
+            
+            cli::cli_h2("Processing system text in buffer")
 
             # Check if system text in buffer has grown
             system_text_in_buffer <- readLines(system_text_in_path)
-            cli::cli_alert_info("System text in line count is {system_text_in_buffer |> length()}")
+            cli::cli_alert_info("System text in buffer has {system_text_in_buffer |> length()} lines ({(system_text_in_buffer |> length()) - system_text_in_last_processed_line} new)")
 
             # If system text in buffer has grown, stream the delta
             if (length(system_text_in_buffer) > system_text_in_last_processed_line) {
+              cli::cli_alert_info("Streaming new system text in lines")
               new_lines <- system_text_in_buffer[system_text_in_last_processed_line + 1:length(system_text_in_buffer)]
 
               # Send the text
@@ -369,17 +404,21 @@ Stream <- R6::R6Class("Stream",
               payload <- list(type = jsonlite::unbox("response.create"))
               websocket$send(jsonlite::toJSON(payload, auto_unbox = FALSE))
 
+              cli::cli_alert_success("Finished streaming new system text in lines")
             }
 
             # Update last processed line
             system_text_in_last_processed_line <- length(system_text_in_buffer)
 
+            cli::cli_h2("Processing user text in buffer")
+
             # Check if user text in buffer has grown
             user_text_in_buffer <- readLines(user_text_in_path)
-            cli::cli_alert_info("User text in line count is {user_text_in_buffer |> length()}")
+            cli::cli_alert_info("User text in buffer has {user_text_in_buffer |> length()} lines ({(user_text_in_buffer |> length()) - user_text_in_last_processed_line} new)")
 
             # If user text in buffer has grown, stream the delta
             if (length(user_text_in_buffer) > user_text_in_last_processed_line) {
+              cli::cli_alert_info("Streaming new user text in lines")
               new_lines <- user_text_in_buffer[user_text_in_last_processed_line + 1:length(user_text_in_buffer)]
 
               for (line in new_lines) {
@@ -402,17 +441,22 @@ Stream <- R6::R6Class("Stream",
               payload <- list(type = jsonlite::unbox("response.create"))
               websocket$send(jsonlite::toJSON(payload, auto_unbox = FALSE))
 
+              cli::cli_alert_success("Finished streaming new user text in lines")
             }
 
             # Update last processed line
             user_text_in_last_processed_line <- length(user_text_in_buffer)
 
+            cli::cli_h2("Processing audio in buffer")
+
             # Check if audio in buffer has grown
-            audio_in_buffer_size <- fs::file_size(audio_in_buffer_file)
-            cli::cli_alert_info("Audio in buffer size is {audio_in_buffer_size}")
+            audio_in_buffer_size <- fs::file_size(audio_in_buffer_file) |> as.numeric()
+            cli::cli_alert_info("Audio in buffer size is {audio_in_buffer_size} ({audio_in_last_processed_byte - audio_in_buffer_size} new bytes)")
 
             # If audio in buffer has grown, stream the delta
             if (audio_in_buffer_size > audio_in_last_processed_byte) {
+
+              cli::cli_alert_info("Streaming new audio in")
 
               # Open connection to the file and read the new binary data
               connection <- file(audio_in_buffer_file, "rb") # "rb" reads in binary mode
@@ -427,14 +471,6 @@ Stream <- R6::R6Class("Stream",
               # Encode the new audio data as base64
               new_audio_b64 <- base64enc::base64encode(new_audio_bin)
 
-              # Send to server
-              if (websocket$readyState() != 1L) {
-                cli::cli_alert_danger("Stream is not in a ready state")
-                # Dump eventlog to temp file for analysis
-                saveRDS(eventlog, "/tmp/eventlog.rds")
-                return(eventlog)
-              }
-
               # Send the audio, there is no need to commit or trigger a response as
               # this happens automatically in VAD mode
               payload <- list(
@@ -446,13 +482,12 @@ Stream <- R6::R6Class("Stream",
 
               # Update the last processed position
               audio_in_last_processed_byte <- audio_in_buffer_size
+
+              cli::cli_alert_success("Finished streaming new audio in")
             }
 
-            # Check event log for updates
-            eventlog_current <- eventlog$as_tibble()
-            cli::cli_alert_info("There are {nrow(eventlog_current)} total events")
-            eventlog_new <- dplyr::anti_join(eventlog_current, eventlog_streamed, by = dplyr::join_by(created_at, type, data))
-            
+            cli::cli_h2("Processing text out from event log")
+
             # Write new text out events to the buffer
             new_text_out <- eventlog_new |>
               dplyr::filter(type == "response.text.done")
@@ -467,6 +502,9 @@ Stream <- R6::R6Class("Stream",
               text_received <- c(text_received, new_text_out)
               writeRDS(text_received, text_out_path)
             }
+            cli::cli_alert_success("New text out events written to buffer")
+
+            cli::cli_h2("Processing audio out from event log")
 
             # Write new audio out events to the buffer
             new_audio <- eventlog_new |>
@@ -483,12 +521,22 @@ Stream <- R6::R6Class("Stream",
                 writeLines(new_audio, audio_buffer_file)
               }
             }
+            cli::cli_alert_success("New audio out events written to buffer")
 
             # Update the eventlog
-            eventlog_streamed <- eventlog_current
+            eventlog_processed <- eventlog_current
 
+            # Iterate the loop
             main_loop_i <- main_loop_i + 1
+
+            # Flush pending futures
+            realtalk::do_later_now()
+            Sys.sleep(0.2)
+
           } # End of main streaming loop
+
+          cli::cli_alert_info("Main streaming loop ended")
+          return(eventlog)
 
         }, args = list(
           api_key = api_key,
@@ -529,7 +577,7 @@ Stream <- R6::R6Class("Stream",
 
       # Wait for the background process to shut down
       shutdown_timer <- 0
-      shutdown_timeout <- 10
+      shutdown_timeout <- 30
       shutdown_polling_interval <- 1
       while (self$bg_process$is_alive()) {
         cli::cli_alert_info("Shutting down stream...")
