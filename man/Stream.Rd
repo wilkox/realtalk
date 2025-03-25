@@ -13,6 +13,12 @@ Represents a streaming session with the OpenAI Realtime API
 
 \item{\code{bg_process}}{The callr background R process in which the websocket
 and the main streaming loop are instantiated}
+
+\item{\code{bg_close_path}}{The path for a temporary file used to signal the
+background process to close}
+
+\item{\code{eventlog}}{The EventLog for a completed stream. Will be NULL until
+stop_streaming() has been called.}
 }
 \if{html}{\out{</div>}}
 }
@@ -21,6 +27,7 @@ and the main streaming loop are instantiated}
 \itemize{
 \item \href{#method-Stream-transcript}{\code{Stream$transcript()}}
 \item \href{#method-Stream-start_streaming}{\code{Stream$start_streaming()}}
+\item \href{#method-Stream-stop_streaming}{\code{Stream$stop_streaming()}}
 \item \href{#method-Stream-new}{\code{Stream$new()}}
 \item \href{#method-Stream-send_text}{\code{Stream$send_text()}}
 \item \href{#method-Stream-close}{\code{Stream$close()}}
@@ -67,6 +74,19 @@ in a callr subprocess, which is stored in the bg_process slot.
 }
 \if{html}{\out{</div>}}
 }
+\subsection{Returns}{
+No return
+}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-Stream-stop_streaming"></a>}}
+\if{latex}{\out{\hypertarget{method-Stream-stop_streaming}{}}}
+\subsection{Method \code{stop_streaming()}}{
+Ends live audio streaming
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{Stream$stop_streaming()}\if{html}{\out{</div>}}
+}
+
 \subsection{Returns}{
 No return
 }
