@@ -301,15 +301,15 @@ Stream <- R6::R6Class("Stream",
               while (TRUE) {
                 audio_files_in_buffer <- fs::dir_ls(audio_out_tempdir)
                 cli::cli_alert_info("There are {length(audio_files_in_buffer)} files in the audio out buffer")
-                log(glue::glue("Background audio out loop: there are {length(audio_files_in_buffer)} files in the audio out buffer"))
+                log(glue::glue("audio_out_bg: there are {length(audio_files_in_buffer)} files in the audio out buffer"))
                 if (length(audio_files_in_buffer) > 0) {
                   cli::cli_alert_info("Reading, concatenating, and playing audio files...")
-                  log("Background audio out loop: reading, concatenating, and playing audio files")
+                  log("audio_out_bg: reading, concatenating, and playing audio files")
                   purrr::map(audio_files_in_buffer, readLines) |>
                     paste0() |>
                     realtalk::play_audio_chunk()
                   cli::cli_alert_info("Deleting played files...")
-                  log("Background audio out loop: deleting played audio files")
+                  log("audio_out_bg: deleting played audio files")
                   fs::file_delete(audio_files_in_buffer)
                 } else {
                   Sys.sleep(0.2)
@@ -319,23 +319,30 @@ Stream <- R6::R6Class("Stream",
             args = list(
               audio_out_tempdir = audio_out_tempdir,
               log = log
-            )
+            ),
+            stderr = fs::file_temp(), # These redirects are needed as keepalives for
+            stdout = fs::file_temp()  # the background process
           )
 
           # Initiate sox streaming of audio in to buffer file
           cli::cli_alert_info("Initialising background audio in loop")
           log("Initialising background audio in loop")
-          sox_bg <- callr::r_bg(function(audio_in_buffer_file, log) {
-            sox_args <- c(
-              "-q", # Quiet mode
-              "-t", "coreaudio", "default",
-              "-b", "16", # 16-bit depth
-              "-r", "24000", # 24 kHz sample rate
-              "-c", "1", # 1 channel (mono)
-              audio_in_buffer_file
-            )
-            system2("sox", sox_args, stderr = FALSE)
-          }, args = list(audio_in_buffer_file, log = log))
+          sox_bg <- callr::r_bg(
+            function(audio_in_buffer_file, log) {
+              sox_args <- c(
+                "-q", # Quiet mode
+                "-t", "coreaudio", "default",
+                "-b", "16", # 16-bit depth
+                "-r", "24000", # 24 kHz sample rate
+                "-c", "1", # 1 channel (mono)
+                audio_in_buffer_file
+              )
+              system2("sox", sox_args, stderr = FALSE)
+            }, 
+            args = list(audio_in_buffer_file, log = log),
+            stderr = fs::file_temp(), # These redirects are needed as keepalives for
+            stdout = fs::file_temp()  # the background process
+          )
 
           # Wait for sox to begin working
           sox_timer <- 0
@@ -368,7 +375,7 @@ Stream <- R6::R6Class("Stream",
           while (TRUE) {
 
             cli::cli_h1("Main loop iteration #{main_loop_i}: {realtalk::timestamp()}")
-            log(glue::glue("Main loop: iteration #{main_loop_i}: {realtalk::timestamp()}"))
+            log(glue::glue("Main loop: iteration #{main_loop_i}"))
             realtalk::do_later_now()
 
             cli::cli_h2("Performing checks")
@@ -406,6 +413,10 @@ Stream <- R6::R6Class("Stream",
             if (websocket$readyState() != 1L) {
               cli::cli_alert_danger("WebSocket is not in a ready state, aborting and returning eventlog for analysis")
               log("Main loop: WebSocket is not in a ready state, aborting")
+              log(glue::glue("Main loop: WebSocket state is {websocket$readyState()}"))
+              eventlog_dump <- fs::file_temp(pattern = "eventlog", ext = "rds")
+              log(glue::glue("Main loop: dumping event log to {eventlog_dump} for analysis"))
+              saveRDS(eventlog, eventlog_dump)
               return(eventlog)
             } else {
               cli::cli_alert_success("WebSocket is in a ready state")
@@ -556,7 +567,7 @@ Stream <- R6::R6Class("Stream",
             new_text_out <- eventlog_new |>
               dplyr::filter(type == "response.text.done")
             cli::cli_alert_info("There are {nrow(new_text_out)} new text out events")
-            log(glue::glue("There are {nrow(new_text_out)} new text out events"))
+            log(glue::glue("Main loop: there are {nrow(new_text_out)} new text out events"))
             if (nrow(new_text_out) > 0) {
               new_text_out <- new_text_out |>
                 dplyr::pull(data) |>
@@ -565,7 +576,7 @@ Stream <- R6::R6Class("Stream",
                 as.list()
               text_received <- readRDS(text_out_path)
               text_received <- c(text_received, new_text_out)
-              writeRDS(text_received, text_out_path)
+              saveRDS(text_received, text_out_path)
             }
             cli::cli_alert_success("New text out events written to buffer")
             log("Main loop: new text out events written to buffer")
@@ -619,7 +630,9 @@ Stream <- R6::R6Class("Stream",
           text_out_path = self$text_out_path,
           stream_ready_path = stream_ready_path,
           log = self$log
-        )
+        ),
+        stderr = fs::file_temp(), # These redirects are needed as keepalives for
+        stdout = fs::file_temp()  # the background process
       ) # End of callr::r_bg call for main loop
 
       # Wait until stream initiation signal received
@@ -647,7 +660,7 @@ Stream <- R6::R6Class("Stream",
     #' @return No return
     stop_streaming = function() {
 
-      log("stop_streaming: called")
+      self$log("stop_streaming: called")
 
       # Touch the background close file
       fs::file_touch(self$bg_close_path)
@@ -660,19 +673,19 @@ Stream <- R6::R6Class("Stream",
       while (self$bg_process$is_alive()) {
         shutdown_timer <- shutdown_timer + shutdown_polling_interval
         if (shutdown_timer >= shutdown_timeout) {
+          self$log(glue::glue("stop_streaming: timed out waiting for shutdown after {shutdown_timer} seconds"))
           cli::cli_abort("Timed out waiting for shutdown after {shutdown_timer} seconds")
-          log(glue::glue("stop_streaming: timed out waiting for shutdown after {shutdown_timer} seconds"))
         }
         Sys.sleep(shutdown_polling_interval)
       }
       cli::cli_alert_success("Stream shut down")
-      log("stop_streaming: stream shut down")
+      self$log("stop_streaming: stream shut down")
 
       # Retrieve the event log
       self$eventlog <- self$bg_process$get_result()
       eventlog_path <- fs::file_temp("eventlog", "rds")
-      writeRDS(self$eventlog, eventlog_path)
-      log(glue::glue("stop_streaming: event log dumped to {.path eventlog_path}"))
+      saveRDS(self$eventlog, eventlog_path)
+      self$log(glue::glue("stop_streaming: event log dumped to {.path eventlog_path}"))
 
     },
 
