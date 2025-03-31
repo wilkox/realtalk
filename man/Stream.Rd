@@ -6,13 +6,16 @@
 \description{
 Represents a streaming session with the OpenAI Realtime API
 }
+\seealso{
+\link{log_path}
+
+\link{log}
+}
 \section{Public fields}{
 \if{html}{\out{<div class="r6-fields">}}
 \describe{
-\item{\code{websocket}}{The websocket::WebSocket object}
-
 \item{\code{bg_process}}{The callr background R process in which the websocket
-and the main streaming loop are instantiated}
+and streaming loops are instantiated}
 
 \item{\code{bg_close_path}}{The path for a temporary file used to signal the
 background process to close}
@@ -25,8 +28,20 @@ be streamed to the model as messages coming from 'system'.}
 text input buffer for the 'user' role. Text written to this file will
 be streamed to the model as messages coming from 'user'.}
 
+\item{\code{text_out_path}}{The path for a temporary file containing the text
+output buffer from the assistant. This allows for reading of the text
+out stream in real time, as the event log is not generated until the
+stream is completed.}
+
 \item{\code{eventlog}}{The EventLog for a completed stream. Will be NULL until
 stop_streaming() has been called.}
+
+\item{\code{log}}{Function to write to the local log (as distinct from the
+stream EventLog). This is a field holding a static function, not a
+method, to allow the function to be passed into sub-processes.}
+
+\item{\code{log_path}}{Path to the local log (as distinct from the stream
+EventLog).}
 }
 \if{html}{\out{</div>}}
 }
@@ -34,6 +49,7 @@ stop_streaming() has been called.}
 \subsection{Public methods}{
 \itemize{
 \item \href{#method-Stream-transcript}{\code{Stream$transcript()}}
+\item \href{#method-Stream-text_received}{\code{Stream$text_received()}}
 \item \href{#method-Stream-start_streaming}{\code{Stream$start_streaming()}}
 \item \href{#method-Stream-stop_streaming}{\code{Stream$stop_streaming()}}
 \item \href{#method-Stream-new}{\code{Stream$new()}}
@@ -47,19 +63,34 @@ stop_streaming() has been called.}
 \if{html}{\out{<a id="method-Stream-transcript"></a>}}
 \if{latex}{\out{\hypertarget{method-Stream-transcript}{}}}
 \subsection{Method \code{transcript()}}{
-A transcript of the text and audio conversation so far
+Print a formatted transcript of the completed stream
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{Stream$transcript()}\if{html}{\out{</div>}}
 }
 
 }
 \if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-Stream-text_received"></a>}}
+\if{latex}{\out{\hypertarget{method-Stream-text_received}{}}}
+\subsection{Method \code{text_received()}}{
+Return all text messages received from the stream in real time. Useful
+for polling for text output while the stream is still running.
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{Stream$text_received()}\if{html}{\out{</div>}}
+}
+
+\subsection{Returns}{
+A list of text messages received
+}
+}
+\if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-Stream-start_streaming"></a>}}
 \if{latex}{\out{\hypertarget{method-Stream-start_streaming}{}}}
 \subsection{Method \code{start_streaming()}}{
 Open a WebSocket streaming connection to OpenAI Realtime API and begin
-bidirectional audio streaming. The streaming loop will be encapsulated
-in a callr subprocess, which is stored in the bg_process slot.
+bidirectional text and audio streaming. The streaming loops are
+encapsulated in a callr subprocess, which is stored in the bg_process
+slot.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{Stream$start_streaming(
   api_key = lemur::openai_api_key(verbose = FALSE),

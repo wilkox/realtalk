@@ -20,3 +20,5 @@ stream$transcript()
 
 stream$bg_process$read_all_error_lines()
 stream$bg_process$read_all_output_lines()
+
+system("killall r; killall sox")
