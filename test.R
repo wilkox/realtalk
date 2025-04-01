@@ -11,14 +11,9 @@ stream$start_streaming()
 
 stream$send_text("RxAgent: Ask the doctor what medications the patient is taking.", role = "system")
 
-stream$text_received()
-
 stream$stop_streaming()
 
-stream$eventlog
+stream$eventlog$as_tibble()
 stream$transcript()
-
-stream$bg_process$read_all_error_lines()
-stream$bg_process$read_all_output_lines()
 
 system("killall r; killall sox")

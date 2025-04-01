@@ -411,6 +411,7 @@ Stream <- R6::R6Class("Stream",
 
             # Check that stream is in a ready state
             if (websocket$readyState() != 1L) {
+
               cli::cli_alert_danger("WebSocket is not in a ready state, aborting and returning eventlog for analysis")
               log("Main loop: WebSocket is not in a ready state, aborting")
               log(glue::glue("Main loop: WebSocket state is {websocket$readyState()}"))
@@ -431,90 +432,120 @@ Stream <- R6::R6Class("Stream",
             cli::cli_alert_info("There are {nrow(eventlog_current)} events ({nrow(eventlog_current) - nrow(eventlog_processed)} new)")
             log(glue::glue("Main loop: there are {nrow(eventlog_current)} events ({nrow(eventlog_current) - nrow(eventlog_processed)} new)"))
             eventlog_new <- dplyr::anti_join(eventlog_current, eventlog_processed, by = dplyr::join_by(created_at, type, data))
-            
-            cli::cli_h2("Processing system text in buffer")
-            log("Main loop: processing system text in buffer")
 
-            # Check if system text in buffer has grown
-            system_text_in_buffer <- readLines(system_text_in_path)
-            cli::cli_alert_info("System text in buffer has {system_text_in_buffer |> length()} lines ({(system_text_in_buffer |> length()) - system_text_in_last_processed_line} new)")
-            log(glue::glue("Main loop: system text in buffer has {system_text_in_buffer |> length()} lines ({(system_text_in_buffer |> length()) - system_text_in_last_processed_line} new)"))
-
-            # If system text in buffer has grown, stream the delta
-            if (length(system_text_in_buffer) > system_text_in_last_processed_line) {
-              cli::cli_alert_info("Streaming new system text in lines")
-              log("Main loop: streaming new system text")
-              new_lines <- system_text_in_buffer[system_text_in_last_processed_line + 1:length(system_text_in_buffer)]
-
-              # Send the text
-              for (line in new_lines) {
-                payload <- list(
-                  type = jsonlite::unbox("conversation.item.create"),
-                  item = list(
-                    type = jsonlite::unbox("message"),
-                    role = jsonlite::unbox("system"),
-                    content = list(list(
-                      type = jsonlite::unbox("input_text"),
-                      text = jsonlite::unbox(line)
-                    ))
-                  )
-                )
-                websocket$send(jsonlite::toJSON(payload, auto_unbox = FALSE))
-              }
-
-              # Trigger a response
-              payload <- list(type = jsonlite::unbox("response.create"))
-              websocket$send(jsonlite::toJSON(payload, auto_unbox = FALSE))
-              log("Main loop: sent response.create signal")
-
-              cli::cli_alert_success("Finished streaming new system text in lines")
-              log("Main loop: finished streatming new system text")
+            # Check if API is currently mid-response
+            log("Main loop: checking whether API is currently responding")
+            last_response_type <- eventlog$as_tibble() |>
+              dplyr::filter(type %in% c("response.created", "response.done")) |>
+              dplyr::pull(type) |>
+              tail(1)
+            if (length(last_response_type) > 0) {
+              is_responding <- last_response_type == "response.created"
+            } else {
+              is_responding <- FALSE
             }
+            log(glue::glue("Main loop: is_responding is {is_responding}"))
 
-            # Update last processed line
-            system_text_in_last_processed_line <- length(system_text_in_buffer)
+            # Only process text in buffers if the API is not currently returning a response
+            cli::cli_h2("Processing text in buffers")
+            log("Main loop: processing text in buffers")
+            if (is_responding) {
+              cli::cli_alert_info("API is currently responding, will buffer text in until response complete")
+              log("Main loop: API is currently responding, will buffer text in until response complete")
+            } else {
+              
+              cli::cli_h3("Processing system text in buffer")
+              log("Main loop: processing system text in buffer")
 
-            cli::cli_h2("Processing user text in buffer")
-            log("Main loop: processing user text in buffer")
+              # Check if system text in buffer has grown
+              system_text_in_buffer <- readLines(system_text_in_path)
+              cli::cli_alert_info("System text in buffer has {system_text_in_buffer |> length()} lines ({(system_text_in_buffer |> length()) - system_text_in_last_processed_line} new)")
+              log(glue::glue("Main loop: system text in buffer has {system_text_in_buffer |> length()} lines ({(system_text_in_buffer |> length()) - system_text_in_last_processed_line} new)"))
 
-            # Check if user text in buffer has grown
-            user_text_in_buffer <- readLines(user_text_in_path)
-            cli::cli_alert_info("User text in buffer has {user_text_in_buffer |> length()} lines ({(user_text_in_buffer |> length()) - user_text_in_last_processed_line} new)")
-            log(glue::glue("Main loop: user text in buffer has {user_text_in_buffer |> length()} lines ({(user_text_in_buffer |> length()) - user_text_in_last_processed_line} new)"))
+              # If system text in buffer has grown, stream the delta
+              if (length(system_text_in_buffer) > system_text_in_last_processed_line) {
+                cli::cli_alert_info("Streaming new system text in lines")
+                log("Main loop: streaming new system text")
+                new_lines <- system_text_in_buffer[system_text_in_last_processed_line + 1:length(system_text_in_buffer)]
 
-            # If user text in buffer has grown, stream the delta
-            if (length(user_text_in_buffer) > user_text_in_last_processed_line) {
-              cli::cli_alert_info("Streaming new user text in lines")
-              log("Streaming new user text")
-              new_lines <- user_text_in_buffer[user_text_in_last_processed_line + 1:length(user_text_in_buffer)]
-
-              for (line in new_lines) {
                 # Send the text
-                payload <- list(
-                  type = jsonlite::unbox("conversation.item.create"),
-                  item = list(
-                    type = jsonlite::unbox("message"),
-                    role = jsonlite::unbox("user"),
-                    content = list(list(
-                      type = jsonlite::unbox("input_text"),
-                      text = jsonlite::unbox(line)
-                    ))
+                for (line in new_lines) {
+                  line <- stringr::str_trim(line)
+                  if (! checkmate::qtest(line, "S")) next
+                  if (line == "") next
+                  log(glue::glue("Main loop: about to send system text in line ->{line}<-"))
+                  payload <- list(
+                    type = jsonlite::unbox("conversation.item.create"),
+                    item = list(
+                      type = jsonlite::unbox("message"),
+                      role = jsonlite::unbox("system"),
+                      content = list(list(
+                        type = jsonlite::unbox("input_text"),
+                        text = jsonlite::unbox(line)
+                      ))
+                    )
                   )
-                )
+                  websocket$send(jsonlite::toJSON(payload, auto_unbox = FALSE))
+                }
+
+                # Trigger a response
+                payload <- list(type = jsonlite::unbox("response.create"))
                 websocket$send(jsonlite::toJSON(payload, auto_unbox = FALSE))
+                log("Main loop: sent response.create signal")
+
+                cli::cli_alert_success("Finished streaming new system text in lines")
+                log("Main loop: finished streaming new system text")
               }
 
-              # Trigger a response
-              payload <- list(type = jsonlite::unbox("response.create"))
-              websocket$send(jsonlite::toJSON(payload, auto_unbox = FALSE))
-              log("Main loop: sent response.create signal")
+              # Update last processed line
+              system_text_in_last_processed_line <- length(system_text_in_buffer)
 
-              cli::cli_alert_success("Finished streaming new user text in lines")
-              log("Main loop: finished streaming new user text")
+              cli::cli_h3("Processing user text in buffer")
+              log("Main loop: processing user text in buffer")
+
+              # Check if user text in buffer has grown
+              user_text_in_buffer <- readLines(user_text_in_path)
+              cli::cli_alert_info("User text in buffer has {user_text_in_buffer |> length()} lines ({(user_text_in_buffer |> length()) - user_text_in_last_processed_line} new)")
+              log(glue::glue("Main loop: user text in buffer has {user_text_in_buffer |> length()} lines ({(user_text_in_buffer |> length()) - user_text_in_last_processed_line} new)"))
+
+              # If user text in buffer has grown, stream the delta
+              if (length(user_text_in_buffer) > user_text_in_last_processed_line) {
+                cli::cli_alert_info("Streaming new user text in lines")
+                log("Streaming new user text")
+                new_lines <- user_text_in_buffer[user_text_in_last_processed_line + 1:length(user_text_in_buffer)]
+
+                # Send the text
+                for (line in new_lines) {
+                  line <- stringr::str_trim(line)
+                  if (! checkmate::qtest(line, "S")) next
+                  if (line == "") next
+                  log(glue::glue("Main loop: about to send user text in line ->{line}<-"))
+                  payload <- list(
+                    type = jsonlite::unbox("conversation.item.create"),
+                    item = list(
+                      type = jsonlite::unbox("message"),
+                      role = jsonlite::unbox("user"),
+                      content = list(list(
+                        type = jsonlite::unbox("input_text"),
+                        text = jsonlite::unbox(line)
+                      ))
+                    )
+                  )
+                  websocket$send(jsonlite::toJSON(payload, auto_unbox = FALSE))
+                }
+
+                # Trigger a response
+                payload <- list(type = jsonlite::unbox("response.create"))
+                websocket$send(jsonlite::toJSON(payload, auto_unbox = FALSE))
+                log("Main loop: sent response.create signal")
+
+                cli::cli_alert_success("Finished streaming new user text in lines")
+                log("Main loop: finished streaming new user text")
+              }
+
+              # Update last processed line
+              user_text_in_last_processed_line <- length(user_text_in_buffer)
             }
-
-            # Update last processed line
-            user_text_in_last_processed_line <- length(user_text_in_buffer)
 
             cli::cli_h2("Processing audio in buffer")
             log("Main loop: processing audio in buffer")
@@ -681,11 +712,11 @@ Stream <- R6::R6Class("Stream",
       cli::cli_alert_success("Stream shut down")
       self$log("stop_streaming: stream shut down")
 
-      # Retrieve the event log
+      # Dump the event log
       self$eventlog <- self$bg_process$get_result()
-      eventlog_path <- fs::file_temp("eventlog", "rds")
-      saveRDS(self$eventlog, eventlog_path)
-      self$log(glue::glue("stop_streaming: event log dumped to {.path eventlog_path}"))
+      eventlog_dump <- fs::file_temp(pattern = "eventlog", ext = "rds")
+      saveRDS(self$eventlog, eventlog_dump)
+      self$log(glue::glue("stop_streaming: event log dumped to {eventlog_dump}"))
 
     },
 
@@ -734,6 +765,8 @@ Stream <- R6::R6Class("Stream",
       # Set up the logfile split
       while (! fs::file_exists(self$log_path) ) { Sys.sleep(0.01) }
       cli::cli_alert_info("Logfile split should open below")
+      cli::cli_alert_info("Logfile path is:")
+      cli::cli_text(self$log_path)
       system2("tmux", args = c(
         "split-window",
         "-v",
