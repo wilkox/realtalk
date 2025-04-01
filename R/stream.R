@@ -29,6 +29,10 @@ Stream <- R6::R6Class("Stream",
     #' stream is completed.
     text_out_path = NULL,
 
+    #' @field audio_out_buffer_path The path for temporary file containing the
+    #' audio out buffer. New audio response deltas are appended to this buffer.
+    audio_out_buffer_path = NULL,
+
     #' @field eventlog The EventLog for a completed stream. Will be NULL until
     #' stop_streaming() has been called.
     eventlog = NULL,
@@ -204,6 +208,7 @@ Stream <- R6::R6Class("Stream",
           user_text_in_path,
           text_out_path,
           stream_ready_path,
+          audio_out_buffer_path,
           log
         ) {
 
@@ -234,6 +239,14 @@ Stream <- R6::R6Class("Stream",
             data <- jsonlite::fromJSON(event$data)
             event <- realtalk::Event$new(data) 
             eventlog$add(event)
+
+            # Stream audio deltas directly into the audio out buffer as b64
+            if (data$type == "response.audio.delta") {
+              audio_out_buffer_con <- file(audio_out_buffer_path, "at")
+              writeLines(data$delta, audio_out_buffer_con)
+              close(audio_out_buffer_con)
+              log("Event monitor: new audio out delta written to buffer")
+            }
           })
           
           # Define callback event for WebSocket throwing an error
@@ -283,41 +296,38 @@ Stream <- R6::R6Class("Stream",
           realtalk::do_later_now()
 
           # Initialise audio I/O buffers
-          audio_out_tempdir <- fs::path_temp("audio_out")
-          fs::dir_create(audio_out_tempdir)
-          log(glue::glue("audio_out_tempdir is {audio_out_tempdir}"))
-          audio_in_buffer_file <- fs::file_temp(pattern = "audio_out_buffer", ext = "wav")
+          audio_in_buffer_file <- fs::file_temp(pattern = "audio_in_buffer", ext = "wav")
           log(glue::glue("audio_in_buffer_file is {audio_in_buffer_file}"))
 
           # Background function to catch and play streamed audio out
           cli::cli_alert_info("Initialising background audio out loop")
           log("Initialising background audio out loop")
           audio_out_bg <- callr::r_bg(
-            function(audio_out_tempdir, log) {
+            function(audio_out_buffer_path, log) {
               cli::cli_alert_info("Background audio out loop initiated")
-              cli::cli_alert_info("Directory is {audio_out_tempdir}")
+              log("audio_out_bg: loop initiated")
 
               # Audio out loop
+              audio_out_buffer_last_processed_line <- 0
               while (TRUE) {
-                audio_files_in_buffer <- fs::dir_ls(audio_out_tempdir)
-                cli::cli_alert_info("There are {length(audio_files_in_buffer)} files in the audio out buffer")
-                log(glue::glue("audio_out_bg: there are {length(audio_files_in_buffer)} files in the audio out buffer"))
-                if (length(audio_files_in_buffer) > 0) {
-                  cli::cli_alert_info("Reading, concatenating, and playing audio files...")
-                  log("audio_out_bg: reading, concatenating, and playing audio files")
-                  purrr::map(audio_files_in_buffer, readLines) |>
-                    paste0() |>
-                    realtalk::play_audio_chunk()
-                  cli::cli_alert_info("Deleting played files...")
-                  log("audio_out_bg: deleting played audio files")
-                  fs::file_delete(audio_files_in_buffer)
-                } else {
-                  Sys.sleep(0.2)
-                }
+                audio_out_buffer <- readLines(audio_out_buffer_path)
+                if (length(audio_out_buffer) > 
+                      audio_out_buffer_last_processed_line) {
+                  log("audio_out_bg: new audio detected in buffer")
+                  new_audio_b64 <- audio_out_buffer[audio_out_buffer_last_processed_line + 1:length(audio_out_buffer)] |>
+                  paste0(collapse = "")
+                  # Append some silence to minimise artefacts
+                  silence <- paste0(rep("A", 1000), collapse = "")
+                  new_audio_b64 <- paste0(silence, new_audio_b64, silence)
+                  realtalk::play_audio_chunk(new_audio_b64)
+                  audio_out_buffer_last_processed_line <- length(audio_out_buffer)
+
+              }
+              Sys.sleep(0.05)
               }
             }, 
             args = list(
-              audio_out_tempdir = audio_out_tempdir,
+              audio_out_buffer_path = audio_out_buffer_path,
               log = log
             ),
             stderr = fs::file_temp(), # These redirects are needed as keepalives for
@@ -612,28 +622,6 @@ Stream <- R6::R6Class("Stream",
             cli::cli_alert_success("New text out events written to buffer")
             log("Main loop: new text out events written to buffer")
 
-            cli::cli_h2("Processing audio out from event log")
-            log("Main loop: processing audio out from event log")
-
-            # Write new audio out events to the buffer
-            new_audio <- eventlog_new |>
-              dplyr::filter(type == "response.audio.delta") 
-            cli::cli_alert_info("There are {nrow(new_audio)} new audio out events")
-            log(glue::glue("Main loop: there are {nrow(new_audio)} new audio out events"))
-            if (nrow(new_audio) > 0) {
-              new_audio <- new_audio |>
-                dplyr::pull(data) |>
-                dplyr::bind_rows() |>
-                dplyr::pull(delta) |>
-                paste0(collapse = "")
-              if (stringr::str_length(new_audio) > 0) {
-                audio_buffer_file <- fs::file_temp(pattern = realtalk::timestamp(), tmp_dir = audio_out_tempdir)
-                writeLines(new_audio, audio_buffer_file)
-              }
-            }
-            cli::cli_alert_success("New audio out events written to buffer")
-            log("Main loop: new audio out events written to buffer")
-
             # Update the eventlog
             eventlog_processed <- eventlog_current
 
@@ -660,6 +648,7 @@ Stream <- R6::R6Class("Stream",
           user_text_in_path = self$user_text_in_path,
           text_out_path = self$text_out_path,
           stream_ready_path = stream_ready_path,
+          audio_out_buffer_path = self$audio_out_buffer_path,
           log = self$log
         ),
         stderr = fs::file_temp(), # These redirects are needed as keepalives for
@@ -759,6 +748,11 @@ Stream <- R6::R6Class("Stream",
       saveRDS(text_received, self$text_out_path)
       self$log(glue::glue("text_out_path is {self$text_out_path}"))
 
+      # Set the audio out buffer path and initialise the buffer file
+      self$audio_out_buffer_path <- fs::file_temp(pattern = "audio_out", ext = "txt")
+      fs::file_create(self$audio_out_buffer_path)
+      self$log(glue::glue("audio_out_buffer_path is {self$audio_out_buffer_path}"))
+
       cli::cli_alert_success("Stream created")
       cli::cli_alert_info("Call {.fun start_streaming} to connect to the API and commence audio and text streaming")
 
@@ -771,7 +765,8 @@ Stream <- R6::R6Class("Stream",
         "split-window",
         "-v",
         "-p", "33",
-        glue::glue("tail -f {self$log_path}")
+        glue::glue("tail -f {self$log_path}"),
+        ";", "tmux", "last-pane"
       ))
 
     },

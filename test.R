@@ -9,11 +9,13 @@ Begin the conversation as if you are answering the phone. Greet the doctor and, 
 
 stream$start_streaming()
 
-stream$send_text("RxAgent: Ask the doctor what medications the patient is taking.", role = "system")
+stream$send_text("RxAgent: Ask the doctor what medications the patient is taking. Wait for an appropriate gap in the conversation before interjecting with this question.", role = "system")
+
+stream$send_text("Ask about allergies", role = "system")
 
 stream$stop_streaming()
 
 stream$eventlog$as_tibble()
 stream$transcript()
 
-system("killall r; killall sox")
+system("killall r; killall sox; killall tail")
