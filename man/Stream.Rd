@@ -33,6 +33,9 @@ output buffer from the assistant. This allows for reading of the text
 out stream in real time, as the event log is not generated until the
 stream is completed.}
 
+\item{\code{audio_out_buffer_path}}{The path for temporary file containing the
+audio out buffer. New audio response deltas are appended to this buffer.}
+
 \item{\code{eventlog}}{The EventLog for a completed stream. Will be NULL until
 stop_streaming() has been called.}
 

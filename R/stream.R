@@ -308,22 +308,20 @@ Stream <- R6::R6Class("Stream",
               log("audio_out_bg: loop initiated")
 
               # Audio out loop
-              audio_out_buffer_last_processed_line <- 0
+              current_line <- 0
               while (TRUE) {
+                # Read new audio from buffer file into playback buffer
                 audio_out_buffer <- readLines(audio_out_buffer_path)
-                if (length(audio_out_buffer) > 
-                      audio_out_buffer_last_processed_line) {
+                if (length(audio_out_buffer) > current_line) {
                   log("audio_out_bg: new audio detected in buffer")
-                  new_audio_b64 <- audio_out_buffer[audio_out_buffer_last_processed_line + 1:length(audio_out_buffer)] |>
-                  paste0(collapse = "")
-                  # Append some silence to minimise artefacts
-                  silence <- paste0(rep("A", 1000), collapse = "")
-                  new_audio_b64 <- paste0(silence, new_audio_b64, silence)
-                  realtalk::play_audio_chunk(new_audio_b64)
-                  audio_out_buffer_last_processed_line <- length(audio_out_buffer)
+                  new_audio_b64 <- audio_out_buffer[current_line + 1:length(audio_out_buffer)] |>
+                    paste0(collapse = "")
+                  current_line <- length(audio_out_buffer)
 
-              }
-              Sys.sleep(0.05)
+                  # Play new audio
+                  realtalk::play_audio_chunk(new_audio_b64)
+                }
+                Sys.sleep(0.05)
               }
             }, 
             args = list(
