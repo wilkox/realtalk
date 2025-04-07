@@ -1,6 +1,8 @@
 #' R6 Class Representing A Stream
 #'
 #' @description Represents a streaming session with the OpenAI Realtime API
+#'
+#' @export
 Stream <- R6::R6Class("Stream",
 
   public = list(
