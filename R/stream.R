@@ -35,8 +35,7 @@ Stream <- R6::R6Class("Stream",
     #' audio out buffer. New audio response deltas are appended to this buffer.
     audio_out_buffer_path = NULL,
 
-    #' @field eventlog The EventLog for a completed stream. Will be NULL until
-    #' stop_streaming() has been called.
+    #' @field eventlog The EventLog for the stream
     eventlog = NULL,
 
     #' @field log Function to write to the local log (as distinct from the
@@ -58,9 +57,6 @@ Stream <- R6::R6Class("Stream",
     transcript = function() {
 
       # Capture events
-      if (is.null(self$eventlog)) {
-        cli::cli_abort("No event log found. Has the stream been run?")
-      }
       events <- self$eventlog$as_tibble()
 
       # Select printable events
@@ -211,6 +207,7 @@ Stream <- R6::R6Class("Stream",
           text_out_path,
           stream_ready_path,
           audio_out_buffer_path,
+          eventlog,
           log
         ) {
 
@@ -218,9 +215,6 @@ Stream <- R6::R6Class("Stream",
 
           # Allow passthrough of cli messages
           options(cli.message_class = "callr_message")
-
-          # Initialise the event log
-          eventlog <- realtalk::EventLog$new()
 
           # Initialise the WebSocket client
           url <- paste0("wss://api.openai.com/v1/realtime?model=", model)
@@ -439,6 +433,23 @@ Stream <- R6::R6Class("Stream",
 
             # Check event log for updates
             eventlog_current <- eventlog$as_tibble()
+
+            # If there are no events left (because the stream is still
+            # initialising), wait for some events to accumulate
+            if (nrow(eventlog_current) == 0) {
+              first_event_elapsed <- 0
+              first_event_timeout <- 10
+              while (nrow(eventlog_current) == 0) {
+                log("Main loop: waiting for first event to appear in event log")
+                eventlog_current <- eventlog$as_tibble()
+                first_event_elapsed <- first_event_elapsed + 1
+                if (first_event_elapsed >= first_event_timeout) break
+                Sys.sleep(1)
+              }
+              log(glue::glue("Main loop: waited {first_event_timeout} seconds but not events appeared in eventlog"))
+              cli::cli_abort("Waited {first_event_timeout} seconds but not events appeared in eventlog")
+            }
+
             cli::cli_alert_info("There are {nrow(eventlog_current)} events ({nrow(eventlog_current) - nrow(eventlog_processed)} new)")
             log(glue::glue("Main loop: there are {nrow(eventlog_current)} events ({nrow(eventlog_current) - nrow(eventlog_processed)} new)"))
             eventlog_new <- dplyr::anti_join(eventlog_current, eventlog_processed, by = dplyr::join_by(created_at, type, data))
@@ -649,6 +660,7 @@ Stream <- R6::R6Class("Stream",
           text_out_path = self$text_out_path,
           stream_ready_path = stream_ready_path,
           audio_out_buffer_path = self$audio_out_buffer_path,
+          eventlog = self$eventlog,
           log = self$log
         ),
         stderr = fs::file_temp(), # These redirects are needed as keepalives for
@@ -768,6 +780,9 @@ Stream <- R6::R6Class("Stream",
         glue::glue("tail -f {self$log_path}"),
         ";", "tmux", "last-pane"
       ))
+
+      # Initialise the event log
+      self$eventlog <- realtalk::EventLog$new()
 
     },
 
