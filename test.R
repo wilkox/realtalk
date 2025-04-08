@@ -9,10 +9,9 @@ Begin the conversation as if you are answering the phone. Greet the doctor and, 
 
 stream$start_streaming()
 
-stream$transcript()
+stream$send_text("Another message to the AI!")
 
-# stream$send_text("RxAgent: Ask the doctor what medications the patient is taking. Wait for an appropriate gap in the conversation before interjecting with this question.", role = "system")
-# stream$send_text("Ask about allergies", role = "system")
+stream$audio_transcript()
 
 stream$stop_streaming()
 

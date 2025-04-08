@@ -50,6 +50,8 @@ EventLog).}
 \section{Methods}{
 \subsection{Public methods}{
 \itemize{
+\item \href{#method-Stream-conversation}{\code{Stream$conversation()}}
+\item \href{#method-Stream-audio_transcript}{\code{Stream$audio_transcript()}}
 \item \href{#method-Stream-transcript}{\code{Stream$transcript()}}
 \item \href{#method-Stream-text_received}{\code{Stream$text_received()}}
 \item \href{#method-Stream-start_streaming}{\code{Stream$start_streaming()}}
@@ -60,6 +62,27 @@ EventLog).}
 \item \href{#method-Stream-ready_state}{\code{Stream$ready_state()}}
 \item \href{#method-Stream-clone}{\code{Stream$clone()}}
 }
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-Stream-conversation"></a>}}
+\if{latex}{\out{\hypertarget{method-Stream-conversation}{}}}
+\subsection{Method \code{conversation()}}{
+Return a tibble of all conversation items (i.e. text and audio messages)
+in the stream
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{Stream$conversation()}\if{html}{\out{</div>}}
+}
+
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-Stream-audio_transcript"></a>}}
+\if{latex}{\out{\hypertarget{method-Stream-audio_transcript}{}}}
+\subsection{Method \code{audio_transcript()}}{
+Return a formatted, plain-text transcript of the audio streams only
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{Stream$audio_transcript()}\if{html}{\out{</div>}}
+}
+
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-Stream-transcript"></a>}}

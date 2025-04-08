@@ -53,8 +53,9 @@ Stream <- R6::R6Class("Stream",
 
     #' @description
     #' 
-    #' Print a formatted transcript of the completed stream
-    transcript = function() {
+    #' Return a tibble of all conversation items (i.e. text and audio messages)
+    #' in the stream
+    conversation = function() {
 
       # Capture events
       events <- self$eventlog$as_tibble()
@@ -121,14 +122,37 @@ Stream <- R6::R6Class("Stream",
         return(glue::glue("I don't know how to extract this type of text! Type is {type}"))
       })
 
-      # Tidy up
-      transcript <- events$message |>
+      # Tidy up and return
+      conversation <- events$message |>
         purrr::map(tibble::as_tibble) |>
         dplyr::bind_rows()
+      
+      return(conversation)
+    },
+
+    #' @description
+    #'
+    #' Return a formatted, plain-text transcript of the audio streams only
+    audio_transcript = function() {
+      self$conversation() |>
+        dplyr::filter(medium == "audio") |>
+        dplyr::mutate(role = ifelse(role == "assistant", "expert system", role)) |>
+        dplyr::mutate(role = ifelse(role == "user", "doctor", role)) |>
+        dplyr::mutate(item = paste0(stringr::str_to_title(role), ": ", content)) |>
+        dplyr::pull(item) |>
+        paste0(collapse = "\n\n")
+    },
+
+    #' @description
+    #' 
+    #' Print a formatted transcript of the completed stream
+    transcript = function() {
 
       # Print a neat transcript
       cli::cli_h1("Transcript")
       cli::cli_alert_info("Messages may appear out of order due to delays in transcription")
+
+      transcript <- self$conversation()
 
       # Display messages
       for (i in seq_len(nrow(transcript))) {
