@@ -1,9 +1,7 @@
 load_all()
 stream <- Stream$new()
 stream$start_streaming()
-stream$send_text("This is a default message")
-stream$send_text("This is a message with trigger_response = TRUE", trigger_response = TRUE)
-stream$send_text("This is a message with trigger_response = FALSE", trigger_response = FALSE)
+stream$send_text("Say hello to the user in the audio stream", role = "system", trigger_response = TRUE)
 stream$stop_streaming()
 
 stream$transcript()

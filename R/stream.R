@@ -320,6 +320,7 @@ Stream <- R6::R6Class("Stream",
               # Audio out loop
               current_line <- 0
               while (TRUE) {
+
                 # Read new audio from buffer file into playback buffer
                 audio_out_buffer <- readLines(audio_out_buffer_path)
                 if (length(audio_out_buffer) > current_line) {
@@ -330,8 +331,11 @@ Stream <- R6::R6Class("Stream",
 
                   # Play new audio
                   realtalk::play_audio_chunk(new_audio_b64)
+
+                # If there is no new audio in the buffer, sleep 50 ms
+                } else {
+                  Sys.sleep(0.05)
                 }
-                Sys.sleep(0.05)
               }
             }, 
             args = list(
