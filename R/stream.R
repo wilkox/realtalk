@@ -15,16 +15,6 @@ Stream <- R6::R6Class("Stream",
     #' background process to close
     bg_close_path = NULL,
 
-    #' @field system_text_in_path The path for a temporary file containing the
-    #' text input buffer for the 'system' role. Text written to this file will
-    #' be streamed to the model as messages coming from 'system'.
-    system_text_in_path = NULL,
-
-    #' @field user_text_in_path The path for a temporary file containing the
-    #' text input buffer for the 'user' role. Text written to this file will
-    #' be streamed to the model as messages coming from 'user'.
-    user_text_in_path = NULL,
-
     #' @field text_out_path The path for a temporary file containing the text
     #' output buffer from the assistant. This allows for reading of the text
     #' out stream in real time, as the event log is not generated until the
@@ -226,8 +216,8 @@ Stream <- R6::R6Class("Stream",
           model,
           voice,
           bg_close_path,
-          system_text_in_path,
-          user_text_in_path,
+          text_in_path,
+          text_in_lock,
           text_out_path,
           stream_ready_path,
           audio_out_buffer_path,
@@ -396,8 +386,6 @@ Stream <- R6::R6Class("Stream",
           main_loop_i <- 0
           fs::file_touch(stream_ready_path)
           audio_in_last_processed_byte <- 0
-          system_text_in_last_processed_line <- 0
-          user_text_in_last_processed_line <- 0
           eventlog_processed <- eventlog$as_tibble()[0, ]
           log("Commencing main streaming loop")
           while (TRUE) {
@@ -499,97 +487,55 @@ Stream <- R6::R6Class("Stream",
               log("Main loop: API is currently responding, will buffer text in until response complete")
             } else {
               
-              cli::cli_h3("Processing system text in buffer")
-              log("Main loop: processing system text in buffer")
+              # Check if there is anything in the text in buffer
+              fs::file_touch(text_in_lock)
+              text_in_buffer <- readRDS(text_in_path)
+              fs::file_delete(text_in_lock)
+              cli::cli_alert_info("Text in buffer has {nrow(text_in_buffer)} items")
+              log(glue::glue("Main loop: text in buffer has {nrow(text_in_buffer)} items"))
 
-              # Check if system text in buffer has grown
-              system_text_in_buffer <- readLines(system_text_in_path)
-              cli::cli_alert_info("System text in buffer has {system_text_in_buffer |> length()} lines ({(system_text_in_buffer |> length()) - system_text_in_last_processed_line} new)")
-              log(glue::glue("Main loop: system text in buffer has {system_text_in_buffer |> length()} lines ({(system_text_in_buffer |> length()) - system_text_in_last_processed_line} new)"))
-
-              # If system text in buffer has grown, stream the delta
-              if (length(system_text_in_buffer) > system_text_in_last_processed_line) {
-                cli::cli_alert_info("Streaming new system text in lines")
-                log("Main loop: streaming new system text")
-                new_lines <- system_text_in_buffer[system_text_in_last_processed_line + 1:length(system_text_in_buffer)]
+              # Stream any items in the buffer
+              if (nrow(text_in_buffer) > 0) {
+                cli::cli_alert_info("Streaming new text in items")
+                log("Main loop: streaming new text in items")
 
                 # Send the text
-                for (line in new_lines) {
-                  line <- stringr::str_trim(line)
-                  if (! checkmate::qtest(line, "S")) next
-                  if (line == "") next
-                  log(glue::glue("Main loop: about to send system text in line ->{line}<-"))
+                for (i in seq_len(nrow(text_in_buffer))) {
+                  text <- stringr::str_trim(text_in_buffer$text[i])
+                  if (! checkmate::qtest(text, "S")) next
+                  if (text == "") next
+                  log(glue::glue("Main loop: about to send text in line ->{text}<-"))
                   payload <- list(
                     type = jsonlite::unbox("conversation.item.create"),
                     item = list(
                       type = jsonlite::unbox("message"),
-                      role = jsonlite::unbox("system"),
+                      role = jsonlite::unbox(text_in_buffer$role[i]),
                       content = list(list(
                         type = jsonlite::unbox("input_text"),
-                        text = jsonlite::unbox(line)
+                        text = jsonlite::unbox(text)
                       ))
                     )
                   )
                   websocket$send(jsonlite::toJSON(payload, auto_unbox = FALSE))
+
+                  # Trigger a response, if needed
+                  if (text_in_buffer$trigger_response[i]) {
+                    payload <- list(type = jsonlite::unbox("response.create"))
+                    websocket$send(jsonlite::toJSON(payload, auto_unbox = FALSE))
+                    log("Main loop: sent response.create signal")
+                  }
                 }
 
-                # Trigger a response
-                payload <- list(type = jsonlite::unbox("response.create"))
-                websocket$send(jsonlite::toJSON(payload, auto_unbox = FALSE))
-                log("Main loop: sent response.create signal")
+                # Wipe the text in buffer
+                fs::file_touch(text_in_lock)
+                text_in <- tibble::tibble(role = character(0), trigger_response = logical(0), text = character(0))
+                saveRDS(text_in, text_in_path)
+                fs::file_delete(text_in_lock)
 
-                cli::cli_alert_success("Finished streaming new system text in lines")
-                log("Main loop: finished streaming new system text")
+                cli::cli_alert_success("Finished streaming system text in")
+                log("Main loop: finished streaming new text in")
               }
 
-              # Update last processed line
-              system_text_in_last_processed_line <- length(system_text_in_buffer)
-
-              cli::cli_h3("Processing user text in buffer")
-              log("Main loop: processing user text in buffer")
-
-              # Check if user text in buffer has grown
-              user_text_in_buffer <- readLines(user_text_in_path)
-              cli::cli_alert_info("User text in buffer has {user_text_in_buffer |> length()} lines ({(user_text_in_buffer |> length()) - user_text_in_last_processed_line} new)")
-              log(glue::glue("Main loop: user text in buffer has {user_text_in_buffer |> length()} lines ({(user_text_in_buffer |> length()) - user_text_in_last_processed_line} new)"))
-
-              # If user text in buffer has grown, stream the delta
-              if (length(user_text_in_buffer) > user_text_in_last_processed_line) {
-                cli::cli_alert_info("Streaming new user text in lines")
-                log("Streaming new user text")
-                new_lines <- user_text_in_buffer[user_text_in_last_processed_line + 1:length(user_text_in_buffer)]
-
-                # Send the text
-                for (line in new_lines) {
-                  line <- stringr::str_trim(line)
-                  if (! checkmate::qtest(line, "S")) next
-                  if (line == "") next
-                  log(glue::glue("Main loop: about to send user text in line ->{line}<-"))
-                  payload <- list(
-                    type = jsonlite::unbox("conversation.item.create"),
-                    item = list(
-                      type = jsonlite::unbox("message"),
-                      role = jsonlite::unbox("user"),
-                      content = list(list(
-                        type = jsonlite::unbox("input_text"),
-                        text = jsonlite::unbox(line)
-                      ))
-                    )
-                  )
-                  websocket$send(jsonlite::toJSON(payload, auto_unbox = FALSE))
-                }
-
-                # Trigger a response
-                payload <- list(type = jsonlite::unbox("response.create"))
-                websocket$send(jsonlite::toJSON(payload, auto_unbox = FALSE))
-                log("Main loop: sent response.create signal")
-
-                cli::cli_alert_success("Finished streaming new user text in lines")
-                log("Main loop: finished streaming new user text")
-              }
-
-              # Update last processed line
-              user_text_in_last_processed_line <- length(user_text_in_buffer)
             }
 
             cli::cli_h2("Processing audio in buffer")
@@ -679,8 +625,8 @@ Stream <- R6::R6Class("Stream",
           model = model,
           voice = voice,
           bg_close_path = self$bg_close_path,
-          system_text_in_path = self$system_text_in_path,
-          user_text_in_path = self$user_text_in_path,
+          text_in_path = private$text_in_path,
+          text_in_lock = private$text_in_lock,
           text_out_path = self$text_out_path,
           stream_ready_path = stream_ready_path,
           audio_out_buffer_path = self$audio_out_buffer_path,
@@ -771,12 +717,12 @@ Stream <- R6::R6Class("Stream",
       self$log(glue::glue("bg_close_path is {self$bg_close_path}"))
 
       # Set the text input buffer file paths
-      self$system_text_in_path <- fs::file_temp(pattern = "system_text_in")
-      fs::file_touch(self$system_text_in_path)
-      self$log(glue::glue("system_text_in_path is {self$system_text_in_path}"))
-      self$user_text_in_path <- fs::file_temp(pattern = "user_text_in")
-      fs::file_touch(self$user_text_in_path)
-      self$log(glue::glue("user_text_in_path is {self$user_text_in_path}"))
+      private$text_in_path <- fs::file_temp(pattern = "text_in_buffer", ext = "rds")
+      text_in <- tibble::tibble(role = character(0), trigger_response = logical(0), text = character(0))
+      saveRDS(text_in, private$text_in_path)
+      self$log(glue::glue("text_in_path is {private$system_text_in_path}"))
+      private$text_in_lock <- fs::file_temp(pattern = "text_in_lock")
+      self$log(glue::glue("text_in_lock is {private$text_in_lock}"))
 
       # Set the text output buffer file path
       self$text_out_path <- fs::file_temp(pattern = "text_out", ext = "rds")
@@ -814,22 +760,29 @@ Stream <- R6::R6Class("Stream",
     #'
     #' @param text A character string to send.
     #' @param role The role, either "user" (default) or "system".
+    #' @param trigger_response Whether to send a "response.create" signal to
+    #' trigger a response. Defaults to FALSE
     #'
-    send_text = function(text, role = "user") {
+    send_text = function(text, role = "user", trigger_response = FALSE) {
 
-      # Set the buffer path based on the role
-      if (role == "user") {
-        buffer_path <- self$user_text_in_path
-      } else if (role == "system") {
-        buffer_path <- self$system_text_in_path
-      } else {
-        cli::cli_abort("Unrecognised role {role}")
+      # Wait for control of the text in buffer file
+      lock_elapsed <- 0
+      lock_timeout <- 10
+      while (fs::file_exists(private$text_in_lock)) {
+        lock_elapsed <- lock_elapsed + 1
+        if (lock_elapsed >= lock_timeout) {
+          cli::cli_abort("Timed out waiting for text in buffer file to unlock after {lock_elapsed} seconds")
+        }
+        Sys.sleep(1)
       }
 
-      # Append the text to the buffer
-      connection <- file(buffer_path, "at") # "at" is appending in text mode
-      writeLines(text, connection)
-      close(connection)
+      # Lock the text in buffer and append the text
+      fs::file_touch(private$text_in_lock)
+      text_in <- readRDS(private$text_in_path)
+      new_text <- tibble::tibble(role = role, trigger_response = trigger_response, text = text)
+      text_in <- dplyr::bind_rows(text_in, new_text)
+      saveRDS(text_in, private$text_in_path)
+      fs::file_delete(private$text_in_lock)
 
     },
 
@@ -849,5 +802,14 @@ Stream <- R6::R6Class("Stream",
       realtalk::do_later_now()
       self$websocket$readyState() |> as.integer()
     }
+  ),
+
+  private = list(
+
+    # Path to the file with the text input buffer (serialised tibble)
+    text_in_path = NULL,
+
+    # Lockfile for the text input buffer
+    text_in_lock = NULL
   )
 )
