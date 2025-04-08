@@ -8,13 +8,6 @@ R6 Class Representing a Log of Events in a Stream
 
 R6 Class Representing a Log of Events in a Stream
 }
-\section{Public fields}{
-\if{html}{\out{<div class="r6-fields">}}
-\describe{
-\item{\code{events}}{A list of Event objects}
-}
-\if{html}{\out{</div>}}
-}
 \section{Methods}{
 \subsection{Public methods}{
 \itemize{

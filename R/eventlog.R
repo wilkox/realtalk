@@ -80,10 +80,10 @@ EventLog <- R6::R6Class("EventLog",
 
   private = list(
 
-    #' @field events_path path of a serialised list of events
+    # path of a serialised list of events
     events_path = NULL,
 
-    #' @field events_lock path to a lockfile for events_path
+    # path to a lockfile for events_path
     events_lock = NULL
 
   )
