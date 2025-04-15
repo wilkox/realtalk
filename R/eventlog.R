@@ -29,7 +29,7 @@ EventLog <- R6::R6Class("EventLog",
 
       # Wait for control of the events file
       lock_elapsed <- 0
-      lock_timeout <- 10
+      lock_timeout <- 30
       while (fs::file_exists(private$events_lock)) {
         lock_elapsed <- lock_elapsed + 1
         if (lock_elapsed >= lock_timeout) {
