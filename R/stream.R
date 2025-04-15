@@ -422,6 +422,12 @@ Stream <- R6::R6Class("Stream",
             log(glue::glue("Main loop: iteration #{main_loop_i}"))
             realtalk::do_later_now()
 
+            # Every 10th iteration, compact the event log
+            if (main_loop_i %% 10 == 0) {
+              log("Main loop: compacting event log")
+              eventlog$compact()
+            }
+
             cli::cli_h2("Performing checks")
             log("Main loop: performing checks")
 
