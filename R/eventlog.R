@@ -52,13 +52,13 @@ EventLog <- R6::R6Class("EventLog",
 
       # Wait for control of the events file
       lock_elapsed <- 0
-      lock_timeout <- 10
+      lock_timeout <- 30
       while (fs::file_exists(private$events_lock)) {
-        lock_elapsed <- lock_elapsed + 1
+        lock_elapsed <- lock_elapsed + 0.1
         if (lock_elapsed >= lock_timeout) {
           cli::cli_abort("Timed out waiting for event file to unlock after {lock_elapsed} seconds")
         }
-        Sys.sleep(1)
+        Sys.sleep(0.1)
       }
 
       # Lock the events file and read the events list
