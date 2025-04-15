@@ -317,6 +317,10 @@ Stream <- R6::R6Class("Stream",
               cli::cli_alert_info("Background audio out loop initiated")
               log("audio_out_bg: loop initiated")
 
+              # Set priority of audio out loop to high
+              current_process <- ps::ps_handle()
+              ps::ps_set_nice(current_process, value = 5L)
+
               # Audio out loop
               current_line <- 0
               while (TRUE) {
