@@ -227,6 +227,11 @@ Stream <- R6::R6Class("Stream",
 
           log("bp_process: initalised")
 
+          # Prioritise the main loop
+          current_process <- ps::ps_handle()
+          ps::ps_set_nice(current_process, value = 5L)
+          log("bp_process: nice set to 5")
+
           # Allow passthrough of cli messages
           options(cli.message_class = "callr_message")
 
@@ -313,7 +318,7 @@ Stream <- R6::R6Class("Stream",
           cli::cli_alert_info("Initialising background audio out loop")
           log("Initialising background audio out loop")
           audio_out_bg <- callr::r_bg(
-            function(audio_out_buffer_path, log) {
+            function(audio_out_buffer_path, eventlog, log) {
               cli::cli_alert_info("Background audio out loop initiated")
               log("audio_out_bg: loop initiated")
 
@@ -325,25 +330,40 @@ Stream <- R6::R6Class("Stream",
               current_line <- 0
               while (TRUE) {
 
-                # Read new audio from buffer file into playback buffer
+                # Read and play new audio from buffer file
                 audio_out_buffer <- readLines(audio_out_buffer_path)
                 if (length(audio_out_buffer) > current_line) {
-                  log("audio_out_bg: new audio detected in buffer")
+                  log(glue::glue("audio_out_bg: new audio detected in buffer (current nice = {ps::ps_get_nice()})"))
                   new_audio_b64 <- audio_out_buffer[current_line + 1:length(audio_out_buffer)] |>
                     paste0(collapse = "")
                   current_line <- length(audio_out_buffer)
 
                   # Play new audio
                   realtalk::play_audio_chunk(new_audio_b64)
-
-                # If there is no new audio in the buffer, sleep 50 ms
                 } else {
-                  Sys.sleep(0.05)
+
+                  # Wait for more audio to appear in the buffer, with the
+                  # polling interval depending on whether the stream is
+                  # reporting ongoing an ongoing audio response
+                  last_audio_event <- eventlog$as_tibble() |>
+                    dplyr::filter(type %in% c(
+                      "response.audio.delta",
+                      "response.audio.done"
+                    )) |>
+                    dplyr::pull(type) |>
+                    tail(1)
+                  if (length(last_audio_event) == 0) {
+                    active_streaming <- FALSE
+                  } else {
+                    active_streaming <- last_audio_event == "response.audio.delta"
+                  }
+                  Sys.sleep(ifelse(active_streaming, 0.5, 0.05))
                 }
-              }
+              } # End of audio out loop
             }, 
             args = list(
               audio_out_buffer_path = audio_out_buffer_path,
+              eventlog = eventlog,
               log = log
             ),
             stderr = fs::file_temp(), # These redirects are needed as keepalives for
