@@ -334,7 +334,7 @@ Stream <- R6::R6Class("Stream",
                 audio_out_buffer <- readLines(audio_out_buffer_path)
                 if (length(audio_out_buffer) > current_line) {
                   log(glue::glue("audio_out_bg: new audio detected in buffer (current nice = {ps::ps_get_nice()})"))
-                  new_audio_b64 <- audio_out_buffer[current_line + 1:length(audio_out_buffer)] |>
+                  new_audio_b64 <- audio_out_buffer[seq(current_line + 1, length(audio_out_buffer))] |>
                     paste0(collapse = "")
                   current_line <- length(audio_out_buffer)
 

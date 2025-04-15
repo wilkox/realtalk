@@ -4,7 +4,5 @@ stream$send_text("Say hello to the user in the audio stream", role = "system", t
 stream$start_streaming()
 
 stream$stop_streaming()
-profvis::profvis({
 stream$transcript()
-})
 system("killall r; killall sox; killall tail")
