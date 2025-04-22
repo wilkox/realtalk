@@ -522,7 +522,7 @@ Stream <- R6::R6Class("Stream",
             } else {
               
               # Check if there is anything in the text in buffer
-              fs::file_touch(text_in_lock)
+              fs::file_create(text_in_lock)
               text_in_buffer <- readRDS(text_in_path)
               fs::file_delete(text_in_lock)
               cli::cli_alert_info("Text in buffer has {nrow(text_in_buffer)} items")
@@ -561,7 +561,7 @@ Stream <- R6::R6Class("Stream",
                 }
 
                 # Wipe the text in buffer
-                fs::file_touch(text_in_lock)
+                fs::file_create(text_in_lock)
                 text_in <- tibble::tibble(role = character(0), trigger_response = logical(0), text = character(0))
                 saveRDS(text_in, text_in_path)
                 fs::file_delete(text_in_lock)
@@ -799,25 +799,57 @@ Stream <- R6::R6Class("Stream",
     #'
     send_text = function(text, role = "user", trigger_response = FALSE) {
 
-      # Wait for control of the text in buffer file
-      lock_elapsed <- 0
-      lock_timeout <- 10
-      while (fs::file_exists(private$text_in_lock)) {
-        lock_elapsed <- lock_elapsed + 1
-        if (lock_elapsed >= lock_timeout) {
-          cli::cli_abort("Timed out waiting for text in buffer file to unlock after {lock_elapsed} seconds")
-        }
-        Sys.sleep(1)
+      # Use a more robust approach to file locking
+      max_attempts <- 10
+      attempt <- 0
+      lock_success <- FALSE
+      
+      while (attempt < max_attempts && !lock_success) {
+        attempt <- attempt + 1
+        
+        # Try to create the lock file
+        tryCatch({
+          # Try to atomically create the lock file
+          # If the file already exists, this will fail
+          if (!fs::file_exists(private$text_in_lock)) {
+            fs::file_create(private$text_in_lock)
+            lock_success <- TRUE
+          } else {
+            # Wait a random amount of time before retrying
+            # This helps prevent processes from continually colliding
+            Sys.sleep(runif(1, min = 0.1, max = 0.5))
+          }
+        }, error = function(e) {
+          # If we couldn't create the lock file, wait and try again
+          self$log(glue::glue("Failed to create lock file on attempt {attempt}: {e$message}"))
+          Sys.sleep(runif(1, min = 0.1, max = 0.5))
+        })
       }
-
-      # Lock the text in buffer and append the text
-      fs::file_touch(private$text_in_lock)
-      text_in <- readRDS(private$text_in_path)
-      new_text <- tibble::tibble(role = role, trigger_response = trigger_response, text = text)
-      text_in <- dplyr::bind_rows(text_in, new_text)
-      saveRDS(text_in, private$text_in_path)
-      fs::file_delete(private$text_in_lock)
-
+      
+      if (! lock_success) {
+        self$log("Failed to acquire lock after maximum attempts")
+        cli::cli_abort("Failed to acquire text in buffer lock after {max_attempts} attempts")
+      }
+      
+      # We have the lock, now operate on the file
+      tryCatch({
+        text_in <- readRDS(private$text_in_path)
+        new_text <- tibble::tibble(role = role, trigger_response = trigger_response, text = text)
+        text_in <- dplyr::bind_rows(text_in, new_text)
+        saveRDS(text_in, private$text_in_path)
+      }, error = function(e) {
+        self$log(glue::glue("Error while processing text buffer: {e$message}"))
+        cli::cli_abort("Error while processing text buffer: {e$message}")
+      }, finally = {
+        # Make sure we always try to release the lock, even if an error occurred
+        tryCatch({
+          if (fs::file_exists(private$text_in_lock)) {
+            fs::file_delete(private$text_in_lock)
+          }
+        }, error = function(e) {
+          self$log(glue::glue("Warning: Failed to release lock: {e$message}"))
+        })
+      })
     },
 
     #' @description
