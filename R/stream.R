@@ -21,6 +21,30 @@ Stream <- R6::R6Class("Stream",
 
     },
 
+    #' Wait until the current or next response is finished
+    #'
+    #' @param timeout Maximum time in seconds to wait before returning an
+    #' error, defaults to 60
+    wait_for_response = function(timeout = 60) {
+
+      n_events_processed <- self$eventlog$as_tibble() |>
+        nrow()
+      start_time <- lubridate::now()
+      while (TRUE) {
+        if (lubridate::interval(start_time, lubridate::now()) / lubridate::dseconds() >= timeout) {
+          cli::cli_abort("{.fun wait_for_response} timed out waiting for response after {timeout} seconds")
+        }
+        eventlog <- self$eventlog$as_tibble()
+        new_types <- eventlog[seq(n_events_processed + 1, nrow(eventlog)), ]$type
+        if ("response.done" %in% new_types) {
+          break
+        } else {
+          n_events_processed <- nrow(eventlog)
+          Sys.sleep(0.1)
+        }
+      }
+    },
+
     #' Return all text and transcibed audio messages in the stream
     #'
     #' @return A tibble of all text and transcribed audio messages in the stream
@@ -109,22 +133,7 @@ Stream <- R6::R6Class("Stream",
       return(conversation)
     },
 
-    #' @description
-    #'
-    #' Return a formatted, plain-text transcript of the audio streams only
-    audio_transcript = function() {
-      self$conversation() |>
-        dplyr::filter(medium == "audio") |>
-        dplyr::mutate(role = ifelse(role == "assistant", "expert system", role)) |>
-        dplyr::mutate(role = ifelse(role == "user", "doctor", role)) |>
-        dplyr::mutate(item = paste0(stringr::str_to_title(role), ": ", content)) |>
-        dplyr::pull(item) |>
-        paste0(collapse = "\n\n")
-    },
-
-    #' @description
-    #' 
-    #' Print a formatted transcript of conversation
+    #' Print a formatted transcript of the stream
     transcript = function() {
 
       # Print a neat transcript
