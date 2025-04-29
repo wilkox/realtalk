@@ -170,22 +170,18 @@ Stream <- R6::R6Class("Stream",
 
     },
 
-    #' @description
+    #' Start the streaming session
     #'
-    #' Open a WebSocket streaming connection to OpenAI Realtime API and begin
-    #' bidirectional text and audio streaming. The streaming loops are
-    #' encapsulated in a callr subprocess, which is stored in the bg_process
-    #' slot.
+    #' Opens a WebSocket streaming connection to the OpenAI Realtime API and
+    #' starts bidirectional text and audio streaming. The streaming loops are
+    #' managed by background processes. 
     #'
     #' @param api_key Your long-term OpenAI API key. Defaults to
     #' `Sys.getenv("OPENAI_API_KEY")`.
-    #' @param model A character string specifying the model. Defaults to
+    #' @param model A string specifying the model. Defaults to
     #' `lemur::openai_api_key()`.
-    #' @param voice A character string specifying the voice to use. Defaults to
-    #' "ballad".
+    #' @param voice A string specifying the voice to use. Defaults to "ballad".
     #' 
-    #' @return No return
-    #'
     start_streaming = function(
       api_key = lemur::openai_api_key(verbose = FALSE),
       model = "gpt-4o-realtime-preview-2024-12-17",
@@ -718,18 +714,16 @@ Stream <- R6::R6Class("Stream",
       self$log("start_streaming: stream initialised")
     },
 
-    #' Reports whether the stream is ready
+    #' Report whether the stream is ready
     #'
     #' @return A logical value
     is_ready = function() {
       fs::file_exists(private$stream_ready_path) |> unname()
     },
 
-    #' @description
+    #' Stop the streaming session
     #'
-    #' Ends live audio streaming
-    #'
-    #' @return No return
+    #' Disconnects from the API and shuts down background I/O processes.
     stop_streaming = function() {
 
       self$log("stop_streaming: called")
@@ -753,20 +747,12 @@ Stream <- R6::R6Class("Stream",
       cli::cli_alert_success("Stream shut down")
       self$log("stop_streaming: stream shut down")
 
-      # Dump the event log
-      self$eventlog <- private$bg_process$get_result()
-      eventlog_dump <- fs::file_temp(pattern = "eventlog", ext = "rds")
-      saveRDS(self$eventlog, eventlog_dump)
-      self$log(glue::glue("stop_streaming: event log dumped to {eventlog_dump}"))
-
       # Remove the stream ready file
       fs::file_delete(private$stream_ready_path)
 
     },
 
-    #' @description
-    #'
-    #' Set up the Stream object
+    #' Set up a new Stream
     #'
     initialize = function(tmux_split = FALSE) {
 
@@ -841,11 +827,10 @@ Stream <- R6::R6Class("Stream",
 
     #' Send a text message to the stream
     #'
-    #' @param text A character string to send.
-    #' @param role The role, either "user" (default) or "system".
-    #' @param trigger_response Whether to send a "response.create" signal to
-    #' trigger a response. Defaults to FALSE
-    #'
+    #' @param text A string to send
+    #' @param role The role, either "user" (default) or "system"
+    #' @param trigger_response Whether to trigger a response from the API.
+    #' Defaults to FALSE
     send_text = function(text, role = "user", trigger_response = FALSE) {
 
       # Use a more robust approach to file locking
@@ -904,7 +889,7 @@ Stream <- R6::R6Class("Stream",
     #' Set the status message
     #'
     #' The status message is sent (as a text message with the 'system' role)
-    #' after each system audio output message
+    #' after each assistant audio output message.
     set_status_message = function(status_message) {
       checkmate::qassert(status_message, "s1")
 
@@ -921,7 +906,7 @@ Stream <- R6::R6Class("Stream",
       # Relinquish the lock
       lck <- filelock::unlock(lck)
 
-      # Update the status mesage field
+      # Update the status message field
       private$status_message <- status_message
     }
   ),

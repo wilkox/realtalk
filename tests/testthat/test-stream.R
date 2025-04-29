@@ -4,7 +4,18 @@ withr::local_options(cli.default_handler = function(...) { NULL })
 test_that("streams create, start, and stop", {
 
   expect_no_error({ stream <- Stream$new() })
+
+  # wait_for_response() should time out waiting for a response, as the stream
+  # has not yet been initalised
+  expect_error({ stream$wait_for_response(timeout = 1) })
+
+  # The stream is not ready yet
   expect_false({ stream$is_ready() })
+
+  # There should be no events in the stream
+  expect_no_error({ conversation <- stream$conversation() })
+  expect_equal(nrow(conversation), 0)
+
   expect_no_error({ stream$start_streaming() })
   expect_true({ stream$is_ready() })
   expect_equal(stream$eventlog$as_tibble()$type[1], "session.created")
