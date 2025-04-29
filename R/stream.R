@@ -218,6 +218,7 @@ Stream <- R6::R6Class("Stream",
           bg_close_path,
           text_in_path,
           text_in_lock,
+          status_message_path,
           text_out_path,
           stream_ready_path,
           audio_out_buffer_path,
@@ -415,6 +416,7 @@ Stream <- R6::R6Class("Stream",
           fs::file_touch(stream_ready_path)
           audio_in_last_processed_byte <- 0
           eventlog_processed <- eventlog$as_tibble()[0, ]
+          n_response_done_status_message <- -1
           log("Commencing main streaming loop")
           while (TRUE) {
 
@@ -512,6 +514,66 @@ Stream <- R6::R6Class("Stream",
               is_responding <- FALSE
             }
             log(glue::glue("Main loop: is_responding is {is_responding}"))
+
+            # Process status message
+            # The status message is sent under the following conditions:
+            # - The status message is non-null and non-blank
+            # - The API is not currently responding
+            # - The number of response.done events has changed since the last time the status message was sent
+            cli::cli_h2("Processing status message")
+            log("Main loop: processing status message")
+
+            # Get a lock on the status message file
+            lck <- filelock::lock(fs::path(status_message_path, ext = "lock"), timeout = 60000)
+            if (is.null(lck)) {
+              log("Failed to acquire lock on status message file")
+              cli::cli_abort("Failed to acquire lock on status message file")
+            }
+
+            # Load the status message
+            status_message <- readRDS(status_message_path)
+
+            # Relinquish the lock
+            lck <- filelock::unlock(lck)
+
+            log(glue::glue("Main loop: status_message is {status_message}"))
+            if (is.null(status_message)) {
+              cli::cli_alert_info("Status message is null, skipping")
+              log("Main loop: status message is null, skipping")
+            } else if (is.na(status_message) | status_message == "") {
+              cli::cli_alert_info("Status message is NA/blank, skipping")
+              log("Main loop: status message is NA/blank, skipping")
+            } else if (is_responding) {
+              cli::cli_alert_info("API is currently responding, skipping status message")
+              log("Main loop: API is currently responding, skipping status message")
+            } else {
+
+              n_response_done <- eventlog$as_tibble() |>
+                dplyr::filter(type == "response.done") |>
+                nrow()
+              
+              if (n_response_done > n_response_done_status_message) {
+                  cli::cli_alert_info("Sending status message")
+                  log("Main loop: sending status message")
+                  payload <- list(
+                    type = jsonlite::unbox("conversation.item.create"),
+                    item = list(
+                      type = jsonlite::unbox("message"),
+                      role = jsonlite::unbox("system"),
+                      content = list(list(
+                        type = jsonlite::unbox("input_text"),
+                        text = jsonlite::unbox(status_message)
+                      ))
+                    )
+                  )
+                  websocket$send(jsonlite::toJSON(payload, auto_unbox = FALSE))
+
+                n_response_done_status_message <- n_response_done
+                } else {
+                cli::cli_alert_info("No new response since status message last sent, skipping status message")
+                log("Main loop: no new response since status message last sent, skipping status message")
+              }
+            }
 
             # Only process text in buffers if the API is not currently returning a response
             cli::cli_h2("Processing text in buffers")
@@ -661,6 +723,7 @@ Stream <- R6::R6Class("Stream",
           bg_close_path = self$bg_close_path,
           text_in_path = private$text_in_path,
           text_in_lock = private$text_in_lock,
+          status_message_path = private$status_message_path,
           text_out_path = self$text_out_path,
           stream_ready_path = stream_ready_path,
           audio_out_buffer_path = self$audio_out_buffer_path,
@@ -757,6 +820,12 @@ Stream <- R6::R6Class("Stream",
       self$log(glue::glue("text_in_path is {private$system_text_in_path}"))
       private$text_in_lock <- fs::file_temp(pattern = "text_in_lock")
       self$log(glue::glue("text_in_lock is {private$text_in_lock}"))
+
+      # Set the status message buffer file path
+      private$status_message_path <- fs::file_temp(pattern = "status_message", ext = "rds")
+      status_message <- character()
+      saveRDS(status_message, private$status_message_path)
+      self$log(glue::glue("status_message_path is {private$status_message_path}"))
 
       # Set the text output buffer file path
       self$text_out_path <- fs::file_temp(pattern = "text_out", ext = "rds")
@@ -860,13 +929,37 @@ Stream <- R6::R6Class("Stream",
       realtalk::do_later_now()
     },
 
-    #' @description
     #' Report the current ready state of the stream
+    #'
     #' @return An integer representing the state of the connection: 0L =
     #' Connecting, 1L = Open, 2L = Closing, 3L = Closed.
     ready_state = function() {
       realtalk::do_later_now()
       self$websocket$readyState() |> as.integer()
+    },
+
+    #' Set the status message
+    #'
+    #' The status message is sent (as a text message with the 'system' role)
+    #' after each system audio output message
+    set_status_message = function(status_message) {
+      checkmate::qassert(status_message, "S1")
+
+      # Get a lock on the status message file
+      lck <- filelock::lock(fs::path(private$status_message_path, ext = "lock"), timeout = 60000)
+      if (is.null(lck)) {
+        log("Failed to acquire lock to update status message file")
+        cli::cli_abort("Failed to acquire to update status message file")
+      }
+
+      # Write the status message
+      saveRDS(status_message, private$status_message_path)
+
+      # Relinquish the lock
+      lck <- filelock::unlock(lck)
+
+      # Update the status mesage field
+      private$status_message <- status_message
     }
   ),
 
@@ -876,6 +969,13 @@ Stream <- R6::R6Class("Stream",
     text_in_path = NULL,
 
     # Lockfile for the text input buffer
-    text_in_lock = NULL
+    text_in_lock = NULL,
+
+    #' @field A message which will be passed (as a system text message) after
+    #' each model audio output finishes
+    status_message = NULL,
+
+    #' @field The path in which the status message will be buffered
+    status_message_path = NULL
   )
 )
