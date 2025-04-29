@@ -50,6 +50,11 @@ Stream <- R6::R6Class("Stream",
       # Capture events
       events <- self$eventlog$as_tibble()
 
+      # If there are no events, return an empty tibble
+      if (nrow(events) == 0) {
+        return(tibble::tibble(role = character(), medium = character(), content = character()))
+      }
+
       # Select printable events
       events <- dplyr::filter(events, type %in% c(
         "conversation.item.created", # Text in
@@ -73,6 +78,11 @@ Stream <- R6::R6Class("Stream",
           return(TRUE)
         }
       }))
+
+      # If there are no printable events, return an empty tibble
+      if (nrow(events) == 0) {
+        return(tibble::tibble(role = character(), medium = character(), content = character()))
+      }
 
       # Determine the role, medium, and content
       events$message <- purrr::pmap(events, function(type, data, ...) {
