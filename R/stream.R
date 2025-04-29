@@ -802,7 +802,7 @@ Stream <- R6::R6Class("Stream",
     #'
     #' Set up the Stream object
     #'
-    initialize = function() {
+    initialize = function(tmux_split = FALSE) {
 
       # Set up the local log
       self$log_path <- fs::file_temp(pattern = "log", ext = "txt")
@@ -851,18 +851,22 @@ Stream <- R6::R6Class("Stream",
       cli::cli_alert_success("Stream created")
       cli::cli_alert_info("Call {.fun start_streaming} to connect to the API and commence audio and text streaming")
 
-      # Set up the logfile split
+      # Set up the logfile
       while (! fs::file_exists(self$log_path) ) { Sys.sleep(0.01) }
       cli::cli_alert_info("Logfile split should open below")
       cli::cli_alert_info("Logfile path is:")
       cli::cli_text(self$log_path)
-      system2("tmux", args = c(
-        "split-window",
-        "-v",
-        "-p", "33",
-        glue::glue("tail -f {self$log_path}"),
-        ";", "tmux", "last-pane"
-      ))
+
+      # Set up the tmux split
+      if (tmux_split) {
+        system2("tmux", args = c(
+          "split-window",
+          "-v",
+          "-p", "33",
+          glue::glue("tail -f {self$log_path}"),
+          ";", "tmux", "last-pane"
+        ))
+      }
 
       # Initialise the event log
       self$eventlog <- realtalk::EventLog$new()
