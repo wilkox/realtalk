@@ -172,16 +172,6 @@ Stream <- R6::R6Class("Stream",
 
     #' @description
     #'
-    #' Return all text messages received from the stream in real time. Useful
-    #' for polling for text output while the stream is still running.
-    #'
-    #' @return A list of text messages received
-    text_received = function() {
-      return(readRDS(private$text_out_path))
-    },
-
-    #' @description
-    #'
     #' Open a WebSocket streaming connection to OpenAI Realtime API and begin
     #' bidirectional text and audio streaming. The streaming loops are
     #' encapsulated in a callr subprocess, which is stored in the bg_process
@@ -213,7 +203,6 @@ Stream <- R6::R6Class("Stream",
           text_in_path,
           text_in_lock,
           status_message_path,
-          text_out_path,
           stream_ready_path,
           audio_out_buffer_path,
           eventlog,
@@ -677,24 +666,6 @@ Stream <- R6::R6Class("Stream",
             cli::cli_h2("Processing text out from event log")
             log("Main loop: processing text out from event log")
 
-            # Write new text out events to the buffer
-            new_text_out <- eventlog_new |>
-              dplyr::filter(type == "response.text.done")
-            cli::cli_alert_info("There are {nrow(new_text_out)} new text out events")
-            log(glue::glue("Main loop: there are {nrow(new_text_out)} new text out events"))
-            if (nrow(new_text_out) > 0) {
-              new_text_out <- new_text_out |>
-                dplyr::pull(data) |>
-                dplyr::bind_rows() |>
-                dplyr::pull(text) |>
-                as.list()
-              text_received <- readRDS(text_out_path)
-              text_received <- c(text_received, new_text_out)
-              saveRDS(text_received, text_out_path)
-            }
-            cli::cli_alert_success("New text out events written to buffer")
-            log("Main loop: new text out events written to buffer")
-
             # Update the eventlog
             eventlog_processed <- eventlog_current
 
@@ -720,7 +691,6 @@ Stream <- R6::R6Class("Stream",
           text_in_path = private$text_in_path,
           text_in_lock = private$text_in_lock,
           status_message_path = private$status_message_path,
-          text_out_path = private$text_out_path,
           stream_ready_path = private$stream_ready_path,
           audio_out_buffer_path = private$audio_out_buffer_path,
           eventlog = self$eventlog,
@@ -838,12 +808,6 @@ Stream <- R6::R6Class("Stream",
       status_message <- NA_character_
       saveRDS(status_message, private$status_message_path)
       self$log(glue::glue("status_message_path is {private$status_message_path}"))
-
-      # Set the text output buffer file path
-      private$text_out_path <- fs::file_temp(pattern = "text_out", ext = "rds")
-      text_received <- list()
-      saveRDS(text_received, private$text_out_path)
-      self$log(glue::glue("text_out_path is {private$text_out_path}"))
 
       # Set the audio out buffer path and initialise the buffer file
       private$audio_out_buffer_path <- fs::file_temp(pattern = "audio_out", ext = "txt")
@@ -976,11 +940,6 @@ Stream <- R6::R6Class("Stream",
 
     # Lockfile for the text input buffer
     text_in_lock = NULL,
-
-    # Path to file containing the text output buffer from the assistant. This
-    # allows for reading of the text out stream in real time, as the event log
-    # is not generated until the stream is completed
-    text_out_path = NULL,
 
     # Path to file containing the audio out buffer. New audio response deltas
     # are appended to this buffer.
