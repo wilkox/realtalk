@@ -1,10 +1,12 @@
 library(testthat)
 
-test_that("a stream can open and close", {
-  stream <- Stream$new(verbose = FALSE)
-  expect_equal(stream$ready_state(), 1)
-  stream$close()
-  expect_equal(stream$ready_state(), 3)
+test_that("streams create, start, and stop without error", {
+  expect_no_error({ stream <- Stream$new() })
+  expect_false({ stream$is_ready() })
+  expect_no_error({ stream$start_streaming() })
+  expect_true({ stream$is_ready() })
+  expect_no_error({ stream$stop_streaming() })
+  expect_false({ stream$is_ready() })
 })
 
 test_that("stream events are logged", {

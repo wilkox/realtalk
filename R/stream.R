@@ -214,10 +214,6 @@ Stream <- R6::R6Class("Stream",
       voice = "ballad"
     ) {
 
-      # Set signal file for stream ready
-      stream_ready_path <- fs::file_temp(pattern = "stream_ready")
-      self$log(glue::glue("stream_ready_path set to {stream_ready_path}"))
-
       # Set up the background process
       self$log("start_streaming: setting up background process for main loop")
       self$bg_process <- callr::r_bg(
@@ -278,11 +274,13 @@ Stream <- R6::R6Class("Stream",
           # Define callback event for WebSocket throwing an error
           websocket$onError(function(event) {
             cli::cli_alert_danger("WebSocket error: {event$message}")
+            fs::file_delete(stream_ready_path)
           })
           
           # Define callback event for WebSocket closing
           websocket$onClose(function(event) {
             cli::cli_alert_success("WebSocket connection closed")
+            fs::file_delete(stream_ready_path)
           })
           
           # Connect to the WebSocket server
@@ -735,7 +733,7 @@ Stream <- R6::R6Class("Stream",
           text_in_lock = private$text_in_lock,
           status_message_path = private$status_message_path,
           text_out_path = self$text_out_path,
-          stream_ready_path = stream_ready_path,
+          stream_ready_path = private$stream_ready_path,
           audio_out_buffer_path = self$audio_out_buffer_path,
           eventlog = self$eventlog,
           log = self$log
@@ -750,7 +748,7 @@ Stream <- R6::R6Class("Stream",
       stream_ready_polling_interval <- 1
       cli::cli_alert_info("Initialising stream...")
       self$log("start_streaming: waiting for confirmation that stream is ready")
-      while (! fs::file_exists(stream_ready_path)) {
+      while (! fs::file_exists(private$stream_ready_path)) {
         stream_ready_timer <- stream_ready_timer + stream_ready_polling_interval
         if (stream_ready_timer >= stream_ready_timeout) {
           self$log(glue::glue("start_streaming: timed out waiting for stream to intialise after {stream_ready_timer} seconds"))
@@ -760,6 +758,13 @@ Stream <- R6::R6Class("Stream",
       }
       cli::cli_alert_success("Stream initialised")
       self$log("start_streaming: stream initialised")
+    },
+
+    #' Reports whether the stream is ready
+    #'
+    #' @return A logical value
+    is_ready = function() {
+      fs::file_exists(private$stream_ready_path) |> unname()
     },
 
     #' @description
@@ -796,6 +801,9 @@ Stream <- R6::R6Class("Stream",
       saveRDS(self$eventlog, eventlog_dump)
       self$log(glue::glue("stop_streaming: event log dumped to {eventlog_dump}"))
 
+      # Remove the stream ready file
+      fs::file_delete(private$stream_ready_path)
+
     },
 
     #' @description
@@ -818,6 +826,10 @@ Stream <- R6::R6Class("Stream",
         close(connection)
       }
       self$log("Stream object initialised")
+
+      # Set signal file for stream ready
+      private$stream_ready_path <- fs::file_temp(pattern = "stream_ready")
+      self$log(glue::glue("stream_ready_path set to {private$stream_ready_path}"))
 
       # Set the background close file path
       self$bg_close_path <- fs::file_temp(pattern = "background_close_signal")
@@ -853,12 +865,12 @@ Stream <- R6::R6Class("Stream",
 
       # Set up the logfile
       while (! fs::file_exists(self$log_path) ) { Sys.sleep(0.01) }
-      cli::cli_alert_info("Logfile split should open below")
       cli::cli_alert_info("Logfile path is:")
       cli::cli_text(self$log_path)
 
       # Set up the tmux split
       if (tmux_split) {
+        cli::cli_alert_info("Logfile split should open below")
         system2("tmux", args = c(
           "split-window",
           "-v",
@@ -935,23 +947,6 @@ Stream <- R6::R6Class("Stream",
       })
     },
 
-    #' @description
-    #' Close the stream
-    close = function() {
-      realtalk::do_later_now() # Flush any pending activity before closing to prevent a warning
-      self$websocket$close()
-      realtalk::do_later_now()
-    },
-
-    #' Report the current ready state of the stream
-    #'
-    #' @return An integer representing the state of the connection: 0L =
-    #' Connecting, 1L = Open, 2L = Closing, 3L = Closed.
-    ready_state = function() {
-      realtalk::do_later_now()
-      self$websocket$readyState() |> as.integer()
-    },
-
     #' Set the status message
     #'
     #' The status message is sent (as a text message with the 'system' role)
@@ -985,11 +980,14 @@ Stream <- R6::R6Class("Stream",
     # Lockfile for the text input buffer
     text_in_lock = NULL,
 
-    #' @field A message which will be passed (as a system text message) after
-    #' each model audio output finishes
+    # Path to file indicating whether stream is ready
+    stream_ready_path = NULL,
+
+    # A message which will be passed (as a system text message) after each
+    # model audio output finishes
     status_message = NULL,
 
-    #' @field The path in which the status message will be buffered
+    # The path in which the status message will be buffered
     status_message_path = NULL
   )
 )
