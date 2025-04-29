@@ -7,44 +7,23 @@ Stream <- R6::R6Class("Stream",
 
   public = list(
 
-    #' @field bg_process The callr background R process in which the websocket
-    #' and streaming loops are instantiated
-    bg_process = NULL,
-
-    #' @field bg_close_path The path for a temporary file used to signal the
-    #' background process to close
-    bg_close_path = NULL,
-
-    #' @field text_out_path The path for a temporary file containing the text
-    #' output buffer from the assistant. This allows for reading of the text
-    #' out stream in real time, as the event log is not generated until the
-    #' stream is completed.
-    text_out_path = NULL,
-
-    #' @field audio_out_buffer_path The path for temporary file containing the
-    #' audio out buffer. New audio response deltas are appended to this buffer.
-    audio_out_buffer_path = NULL,
-
-    #' @field eventlog The EventLog for the stream
+    #' @field eventlog The EventLog for the stream, an EventLog object
     eventlog = NULL,
 
-    #' @field log Function to write to the local log (as distinct from the
-    #' stream EventLog). This is a field holding a static function, not a
-    #' method, to allow the function to be passed into sub-processes.
+    #' Add an entry to the log
     #'
-    #' @seealso [log_path]
-    log = NULL,
+    #' @param entry The entry to be written to the log
+    log = function(entry) {
 
-    #' @field log_path Path to the local log (as distinct from the stream
-    #' EventLog).
+      # This method is overwritten when the stream is initialised to include
+      # the path to the log file, to allow the function to be passed into
+      # sub-processes.
+
+    },
+
+    #' Return all text and transcibed audio messages in the stream
     #'
-    #' @seealso [log]
-    log_path = NULL,
-
-    #' @description
-    #' 
-    #' Return a tibble of all conversation items (i.e. text and audio messages)
-    #' in the stream
+    #' @return A tibble of all text and transcribed audio messages in the stream
     conversation = function() {
 
       # Capture events
@@ -145,7 +124,7 @@ Stream <- R6::R6Class("Stream",
 
     #' @description
     #' 
-    #' Print a formatted transcript of the completed stream
+    #' Print a formatted transcript of conversation
     transcript = function() {
 
       # Print a neat transcript
@@ -189,7 +168,7 @@ Stream <- R6::R6Class("Stream",
     #'
     #' @return A list of text messages received
     text_received = function() {
-      return(readRDS(self$text_out_path))
+      return(readRDS(private$text_out_path))
     },
 
     #' @description
@@ -216,7 +195,7 @@ Stream <- R6::R6Class("Stream",
 
       # Set up the background process
       self$log("start_streaming: setting up background process for main loop")
-      self$bg_process <- callr::r_bg(
+      private$bg_process <- callr::r_bg(
         function(
           api_key,
           model,
@@ -728,13 +707,13 @@ Stream <- R6::R6Class("Stream",
           api_key = api_key,
           model = model,
           voice = voice,
-          bg_close_path = self$bg_close_path,
+          bg_close_path = private$bg_close_path,
           text_in_path = private$text_in_path,
           text_in_lock = private$text_in_lock,
           status_message_path = private$status_message_path,
-          text_out_path = self$text_out_path,
+          text_out_path = private$text_out_path,
           stream_ready_path = private$stream_ready_path,
-          audio_out_buffer_path = self$audio_out_buffer_path,
+          audio_out_buffer_path = private$audio_out_buffer_path,
           eventlog = self$eventlog,
           log = self$log
         ),
@@ -777,14 +756,14 @@ Stream <- R6::R6Class("Stream",
       self$log("stop_streaming: called")
 
       # Touch the background close file
-      fs::file_touch(self$bg_close_path)
+      fs::file_touch(private$bg_close_path)
 
       # Wait for the background process to shut down
       shutdown_timer <- 0
       shutdown_timeout <- 30
       shutdown_polling_interval <- 1
       cli::cli_alert_info("Shutting down stream...")
-      while (self$bg_process$is_alive()) {
+      while (private$bg_process$is_alive()) {
         shutdown_timer <- shutdown_timer + shutdown_polling_interval
         if (shutdown_timer >= shutdown_timeout) {
           self$log(glue::glue("stop_streaming: timed out waiting for shutdown after {shutdown_timer} seconds"))
@@ -796,7 +775,7 @@ Stream <- R6::R6Class("Stream",
       self$log("stop_streaming: stream shut down")
 
       # Dump the event log
-      self$eventlog <- self$bg_process$get_result()
+      self$eventlog <- private$bg_process$get_result()
       eventlog_dump <- fs::file_temp(pattern = "eventlog", ext = "rds")
       saveRDS(self$eventlog, eventlog_dump)
       self$log(glue::glue("stop_streaming: event log dumped to {eventlog_dump}"))
@@ -812,19 +791,21 @@ Stream <- R6::R6Class("Stream",
     #'
     initialize = function(tmux_split = FALSE) {
 
-      # Set up the local log
-      self$log_path <- fs::file_temp(pattern = "log", ext = "txt")
-      fs::file_create(self$log_path)
+      # Set up the local log file and logging function
+      private$log_path <- fs::file_temp(pattern = "log", ext = "txt")
+      fs::file_create(private$log_path)
+      unlockBinding("log", self)
       self$log <- function(entry) {
         if (! checkmate::qtest(entry, "S")) {
           cli::cli_abort("Attempted to log a non-text entry")
           print(entry)
         }
         entry <- glue::glue("[{realtalk::timestamp()}] {entry}")
-        connection <- file(self$log_path, "at") # "at" is appending in text mode
+        connection <- file(private$log_path, "at") # "at" is appending in text mode
         writeLines(entry, connection)
         close(connection)
       }
+      lockBinding("log", self)
       self$log("Stream object initialised")
 
       # Set signal file for stream ready
@@ -832,8 +813,8 @@ Stream <- R6::R6Class("Stream",
       self$log(glue::glue("stream_ready_path set to {private$stream_ready_path}"))
 
       # Set the background close file path
-      self$bg_close_path <- fs::file_temp(pattern = "background_close_signal")
-      self$log(glue::glue("bg_close_path is {self$bg_close_path}"))
+      private$bg_close_path <- fs::file_temp(pattern = "background_close_signal")
+      self$log(glue::glue("bg_close_path is {private$bg_close_path}"))
 
       # Set the text input buffer file paths
       private$text_in_path <- fs::file_temp(pattern = "text_in_buffer", ext = "rds")
@@ -850,23 +831,23 @@ Stream <- R6::R6Class("Stream",
       self$log(glue::glue("status_message_path is {private$status_message_path}"))
 
       # Set the text output buffer file path
-      self$text_out_path <- fs::file_temp(pattern = "text_out", ext = "rds")
+      private$text_out_path <- fs::file_temp(pattern = "text_out", ext = "rds")
       text_received <- list()
-      saveRDS(text_received, self$text_out_path)
-      self$log(glue::glue("text_out_path is {self$text_out_path}"))
+      saveRDS(text_received, private$text_out_path)
+      self$log(glue::glue("text_out_path is {private$text_out_path}"))
 
       # Set the audio out buffer path and initialise the buffer file
-      self$audio_out_buffer_path <- fs::file_temp(pattern = "audio_out", ext = "txt")
-      fs::file_create(self$audio_out_buffer_path)
-      self$log(glue::glue("audio_out_buffer_path is {self$audio_out_buffer_path}"))
+      private$audio_out_buffer_path <- fs::file_temp(pattern = "audio_out", ext = "txt")
+      fs::file_create(private$audio_out_buffer_path)
+      self$log(glue::glue("audio_out_buffer_path is {private$audio_out_buffer_path}"))
 
       cli::cli_alert_success("Stream created")
       cli::cli_alert_info("Call {.fun start_streaming} to connect to the API and commence audio and text streaming")
 
       # Set up the logfile
-      while (! fs::file_exists(self$log_path) ) { Sys.sleep(0.01) }
+      while (! fs::file_exists(private$log_path) ) { Sys.sleep(0.01) }
       cli::cli_alert_info("Logfile path is:")
-      cli::cli_text(self$log_path)
+      cli::cli_text(private$log_path)
 
       # Set up the tmux split
       if (tmux_split) {
@@ -875,7 +856,7 @@ Stream <- R6::R6Class("Stream",
           "split-window",
           "-v",
           "-p", "33",
-          glue::glue("tail -f {self$log_path}"),
+          glue::glue("tail -f {private$log_path}"),
           ";", "tmux", "last-pane"
         ))
       }
@@ -974,20 +955,40 @@ Stream <- R6::R6Class("Stream",
 
   private = list(
 
+    # The callr background R process in which the websocket and streaming loops
+    # are instantiated
+    bg_process = NULL,
+
+    # Path for file used to signal the background process to close
+    bg_close_path = NULL,
+
     # Path to the file with the text input buffer (serialised tibble)
     text_in_path = NULL,
 
     # Lockfile for the text input buffer
     text_in_lock = NULL,
 
-    # Path to file indicating whether stream is ready
+    # Path to file containing the text output buffer from the assistant. This
+    # allows for reading of the text out stream in real time, as the event log
+    # is not generated until the stream is completed
+    text_out_path = NULL,
+
+    # Path to file containing the audio out buffer. New audio response deltas
+    # are appended to this buffer.
+    audio_out_buffer_path = NULL,
+
+    # Path to file used to signal that the stream is ready
     stream_ready_path = NULL,
 
     # A message which will be passed (as a system text message) after each
     # model audio output finishes
     status_message = NULL,
 
-    # The path in which the status message will be buffered
-    status_message_path = NULL
+    # Path to file in which the status message will be buffered
+    status_message_path = NULL,
+
+    # Path to the local log file (as distinct from the stream EventLog)
+    log_path = NULL
+
   )
 )
