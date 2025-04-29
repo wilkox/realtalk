@@ -15,6 +15,7 @@ R6 Class Representing a Log of Events in a Stream
 \item \href{#method-EventLog-add}{\code{EventLog$add()}}
 \item \href{#method-EventLog-as_tibble}{\code{EventLog$as_tibble()}}
 \item \href{#method-EventLog-print}{\code{EventLog$print()}}
+\item \href{#method-EventLog-compact}{\code{EventLog$compact()}}
 \item \href{#method-EventLog-clone}{\code{EventLog$clone()}}
 }
 }
@@ -62,6 +63,16 @@ Return the eventlog as a tibble
 Print the eventlog
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{EventLog$print()}\if{html}{\out{</div>}}
+}
+
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-EventLog-compact"></a>}}
+\if{latex}{\out{\hypertarget{method-EventLog-compact}{}}}
+\subsection{Method \code{compact()}}{
+Compact the log file to optimize storage and reading
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{EventLog$compact()}\if{html}{\out{</div>}}
 }
 
 }

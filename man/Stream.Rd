@@ -20,14 +20,6 @@ and streaming loops are instantiated}
 \item{\code{bg_close_path}}{The path for a temporary file used to signal the
 background process to close}
 
-\item{\code{system_text_in_path}}{The path for a temporary file containing the
-text input buffer for the 'system' role. Text written to this file will
-be streamed to the model as messages coming from 'system'.}
-
-\item{\code{user_text_in_path}}{The path for a temporary file containing the
-text input buffer for the 'user' role. Text written to this file will
-be streamed to the model as messages coming from 'user'.}
-
 \item{\code{text_out_path}}{The path for a temporary file containing the text
 output buffer from the assistant. This allows for reading of the text
 out stream in real time, as the event log is not generated until the
@@ -44,6 +36,21 @@ method, to allow the function to be passed into sub-processes.}
 
 \item{\code{log_path}}{Path to the local log (as distinct from the stream
 EventLog).}
+
+\item{\code{A}}{message which will be passed (as a system text message) after
+each model audio output finishes}
+
+\item{\code{The}}{path in which the status message will be buffered}
+}
+\if{html}{\out{</div>}}
+}
+\section{Active bindings}{
+\if{html}{\out{<div class="r6-active-bindings">}}
+\describe{
+\item{\code{A}}{message which will be passed (as a system text message) after
+each model audio output finishes}
+
+\item{\code{The}}{path in which the status message will be buffered}
 }
 \if{html}{\out{</div>}}
 }
@@ -60,6 +67,7 @@ EventLog).}
 \item \href{#method-Stream-send_text}{\code{Stream$send_text()}}
 \item \href{#method-Stream-close}{\code{Stream$close()}}
 \item \href{#method-Stream-ready_state}{\code{Stream$ready_state()}}
+\item \href{#method-Stream-set_status_message}{\code{Stream$set_status_message()}}
 \item \href{#method-Stream-clone}{\code{Stream$clone()}}
 }
 }
@@ -172,7 +180,7 @@ Send a text message to the stream
 \if{latex}{\out{\hypertarget{method-Stream-send_text}{}}}
 \subsection{Method \code{send_text()}}{
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{Stream$send_text(text, role = "user")}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{Stream$send_text(text, role = "user", trigger_response = FALSE)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
@@ -181,6 +189,9 @@ Send a text message to the stream
 \item{\code{text}}{A character string to send.}
 
 \item{\code{role}}{The role, either "user" (default) or "system".}
+
+\item{\code{trigger_response}}{Whether to send a "response.create" signal to
+trigger a response. Defaults to FALSE}
 }
 \if{html}{\out{</div>}}
 }
@@ -190,6 +201,7 @@ Send a text message to the stream
 \if{latex}{\out{\hypertarget{method-Stream-close}{}}}
 \subsection{Method \code{close()}}{
 Close the stream
+Report the current ready state of the stream
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{Stream$close()}\if{html}{\out{</div>}}
 }
@@ -199,7 +211,6 @@ Close the stream
 \if{html}{\out{<a id="method-Stream-ready_state"></a>}}
 \if{latex}{\out{\hypertarget{method-Stream-ready_state}{}}}
 \subsection{Method \code{ready_state()}}{
-Report the current ready state of the stream
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{Stream$ready_state()}\if{html}{\out{</div>}}
 }
@@ -207,7 +218,20 @@ Report the current ready state of the stream
 \subsection{Returns}{
 An integer representing the state of the connection: 0L =
 Connecting, 1L = Open, 2L = Closing, 3L = Closed.
+Set the status message
+
+The status message is sent (as a text message with the 'system' role)
+after each system audio output message
 }
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-Stream-set_status_message"></a>}}
+\if{latex}{\out{\hypertarget{method-Stream-set_status_message}{}}}
+\subsection{Method \code{set_status_message()}}{
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{Stream$set_status_message(status_message)}\if{html}{\out{</div>}}
+}
+
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-Stream-clone"></a>}}

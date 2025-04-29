@@ -943,7 +943,7 @@ Stream <- R6::R6Class("Stream",
     #' The status message is sent (as a text message with the 'system' role)
     #' after each system audio output message
     set_status_message = function(status_message) {
-      checkmate::qassert(status_message, "S1")
+      checkmate::qassert(status_message, "s1")
 
       # Get a lock on the status message file
       lck <- filelock::lock(fs::path(private$status_message_path, ext = "lock"), timeout = 60000)
