@@ -833,7 +833,7 @@ Stream <- R6::R6Class("Stream",
 
       # Set the status message buffer file path
       private$status_message_path <- fs::file_temp(pattern = "status_message", ext = "rds")
-      status_message <- character()
+      status_message <- NA_character_
       saveRDS(status_message, private$status_message_path)
       self$log(glue::glue("status_message_path is {private$status_message_path}"))
 
