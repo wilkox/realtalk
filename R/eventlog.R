@@ -112,7 +112,11 @@ EventLog <- R6::R6Class("EventLog",
         event_tibbles <- lapply(events, function(event) { event$as_tibble() })
         return(dplyr::bind_rows(event_tibbles))
       } else {
-        return(tibble::tibble())
+        return(tibble::tibble(
+          created_at = as.Date(character(0)),
+          type = character(0),
+          data = list()
+        ))
       }
     },
 
