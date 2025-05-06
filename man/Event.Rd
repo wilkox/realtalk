@@ -4,14 +4,15 @@
 \alias{Event}
 \title{R6 Class Representing a Stream Event}
 \description{
-R6 Class Representing a Stream Event
-
-R6 Class Representing a Stream Event
+The Event class encapsulates events that occur during a streaming session with
+the OpenAI Realtime API. Events can represent actions like messages being sent
+or received, audio being processed, or changes to the stream state. Each Event
+contains the raw event data and a timestamp for when it was created.
 }
 \section{Public fields}{
 \if{html}{\out{<div class="r6-fields">}}
 \describe{
-\item{\code{data}}{The raw event data}
+\item{\code{data}}{The raw event data from the API, usually a list containing event type and payload}
 
 \item{\code{created_at}}{Timestamp for when the Event was created}
 }
@@ -30,7 +31,7 @@ R6 Class Representing a Stream Event
 \if{html}{\out{<a id="method-Event-new"></a>}}
 \if{latex}{\out{\hypertarget{method-Event-new}{}}}
 \subsection{Method \code{new()}}{
-Create an Event
+Create a new Event object
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{Event$new(data)}\if{html}{\out{</div>}}
 }
@@ -38,7 +39,8 @@ Create an Event
 \subsection{Arguments}{
 \if{html}{\out{<div class="arguments">}}
 \describe{
-\item{\code{data}}{The event data}
+\item{\code{data}}{A list containing the event data, must include a 'type' field
+that identifies the kind of event (e.g., "response.created", "response.done")}
 }
 \if{html}{\out{</div>}}
 }
@@ -47,24 +49,32 @@ Create an Event
 \if{html}{\out{<a id="method-Event-as_tibble"></a>}}
 \if{latex}{\out{\hypertarget{method-Event-as_tibble}{}}}
 \subsection{Method \code{as_tibble()}}{
-Return the event as a tibble
+Convert the event to a tibble format
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{Event$as_tibble()}\if{html}{\out{</div>}}
 }
 
 \subsection{Returns}{
-a tibble
+A tibble with three columns:
+\itemize{
+\item created_at: The timestamp when the event was created
+\item type: The event type (extracted from data$type)
+\item data: The complete event data as a list column
+}
 }
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-Event-print"></a>}}
 \if{latex}{\out{\hypertarget{method-Event-print}{}}}
 \subsection{Method \code{print()}}{
-Print the event
+Print the event details to the console
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{Event$print()}\if{html}{\out{</div>}}
 }
 
+\subsection{Returns}{
+Invisibly returns NULL
+}
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-Event-clone"></a>}}
