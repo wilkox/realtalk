@@ -14,11 +14,16 @@ Stream <- R6::R6Class("Stream",
     #'
     #' @param entry The entry to be written to the log
     log = function(entry) {
-
-      # This method is overwritten when the stream is initialised to include
-      # the path to the log file, to allow the function to be passed into
-      # sub-processes.
-
+      # Since we can't modify private methods after initialization,
+      # we implement the logging logic directly here
+      if (! checkmate::qtest(entry, "S")) {
+        cli::cli_abort("Attempted to log a non-text entry")
+        print(entry)
+      }
+      entry <- glue::glue("[{realtalk::timestamp()}] {entry}")
+      connection <- file(private$log_path, "at") # "at" is appending in text mode
+      writeLines(entry, connection)
+      close(connection)
     },
 
     #' Wait until the current or next response is finished
@@ -769,21 +774,14 @@ Stream <- R6::R6Class("Stream",
     #' split. Defaults to FALSE.
     initialize = function(tmux_split = FALSE) {
 
-      # Set up the local log file and logging function
+      # Set up the local log file
       private$log_path <- fs::file_temp(pattern = "log", ext = "txt")
       fs::file_create(private$log_path)
-      unlockBinding("log", self)
-      self$log <- function(entry) {
-        if (! checkmate::qtest(entry, "S")) {
-          cli::cli_abort("Attempted to log a non-text entry")
-          print(entry)
-        }
-        entry <- glue::glue("[{realtalk::timestamp()}] {entry}")
-        connection <- file(private$log_path, "at") # "at" is appending in text mode
-        writeLines(entry, connection)
-        close(connection)
-      }
-      lockBinding("log", self)
+      
+      # Since we can't modify the private$log_impl function directly due to locked bindings,
+      # we'll set the private path variable instead and use it in the log implementation
+      
+      # Log initialization
       self$log("Stream object initialised")
 
       # Set signal file for stream ready
