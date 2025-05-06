@@ -16,9 +16,12 @@ test_that("streams create, start, and stop", {
   expect_no_error({ conversation <- stream$conversation() })
   expect_equal(nrow(conversation), 0)
 
+  # Start streaming
   expect_no_error({ stream$start_streaming() })
   expect_true({ stream$is_ready() })
   expect_equal(stream$eventlog$as_tibble()$type[1], "session.created")
+
+  # Stop streaming
   expect_no_error({ stream$stop_streaming() })
   expect_false({ stream$is_ready() })
 

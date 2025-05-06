@@ -21,7 +21,7 @@ Stream <- R6::R6Class("Stream",
         cli::cli_abort("Attempted to log a non-text entry")
         print(entry)
       }
-      entry <- glue::glue("[{format_datetime()}] {entry}")
+      entry <- glue::glue("[{realtalk::format_datetime()}] {entry}")
       connection <- file(private$log_path, "at") # "at" is appending in text mode
       writeLines(entry, connection)
       close(connection)
@@ -249,22 +249,29 @@ Stream <- R6::R6Class("Stream",
           
           # Define callback event for WebSocket receiving a message
           websocket$onMessage(function(event) {
-            data <- jsonlite::fromJSON(event$data)
-            event <- Event$new(data) 
-            eventlog$add(event)
+            tryCatch({
+              data <- jsonlite::fromJSON(event$data)
+              event <- realtalk::Event$new(data) 
+              eventlog$add(event)
 
-            # Stream audio deltas directly into the audio out buffer as b64
-            if (data$type == "response.audio.delta") {
-              audio_out_buffer_con <- file(audio_out_buffer_path, "at")
-              writeLines(data$delta, audio_out_buffer_con)
-              close(audio_out_buffer_con)
-              log("Event monitor: new audio out delta written to buffer")
-            }
+              # Stream audio deltas directly into the audio out buffer as b64
+              if (data$type == "response.audio.delta") {
+                audio_out_buffer_con <- file(audio_out_buffer_path, "at")
+                writeLines(data$delta, audio_out_buffer_con)
+                close(audio_out_buffer_con)
+                log("Event monitor: new audio out delta written to buffer")
+              }
+            }, error = function(e) {
+              log(glue::glue("WebSocket onMessage error: {e$message}"))
+              log(glue::glue("Error occurred while processing message: {event$data}"))
+              cli::cli_alert_danger("Error in WebSocket message handler: {e$message}")
+            })
           })
           
           # Define callback event for WebSocket throwing an error
           websocket$onError(function(event) {
             cli::cli_alert_danger("WebSocket error: {event$message}")
+            log("WebSocket error: {event$message}")
             # Remove ready signal with lock protection
             stream_ready_lock_path <- fs::path(stream_ready_path, ext = "lock")
             stream_ready_lock <- filelock::lock(stream_ready_lock_path, timeout = 10000)
@@ -292,12 +299,12 @@ Stream <- R6::R6Class("Stream",
           cli::cli_alert_info("Opening WebSocket connection")
           log("Opening WebSocket connection")
           websocket$connect()
-          do_later_now()
+          realtalk::do_later_now()
           start_time <- Sys.time()
           timeout <- 10  # 10 seconds timeout
           while (websocket$readyState() == 0L && difftime(Sys.time(), start_time, units = "secs") < timeout) {
             Sys.sleep(0.1)
-            do_later_now()
+            realtalk::do_later_now()
           }
           if (websocket$readyState() != 1L) {
             cli::cli_abort("Failed to establish WebSocket connection after {timeout} seconds")
@@ -322,7 +329,7 @@ Stream <- R6::R6Class("Stream",
           websocket$send(jsonlite::toJSON(payload, auto_unbox = FALSE))
 
           # Flush the future queue
-          do_later_now()
+          realtalk::do_later_now()
 
           # Initialise audio I/O buffers
           audio_in_buffer_file <- fs::file_temp(pattern = "audio_in_buffer", ext = "wav")
@@ -353,7 +360,7 @@ Stream <- R6::R6Class("Stream",
                   current_line <- length(audio_out_buffer)
 
                   # Play new audio
-                  play_audio_chunk(new_audio_b64)
+                  realtalk::play_audio_chunk(new_audio_b64)
                 } else {
 
                   # Wait for more audio to appear in the buffer, with the
@@ -424,6 +431,22 @@ Stream <- R6::R6Class("Stream",
           cli::cli_alert_success("Confirmed sox is recording")
           log("Audio in buffer file has been created by sox")
 
+          # Wait for the first event to appear in the eventlog
+          eventlog_current <- eventlog$as_tibble()
+          if (nrow(eventlog_current) == 0) {
+            first_event_elapsed <- 0
+            first_event_timeout <- 10
+            while (nrow(eventlog_current) == 0) {
+              log("Main loop: waiting for first event to appear in event log")
+              eventlog_current <- eventlog$as_tibble()
+              first_event_elapsed <- first_event_elapsed + 1
+              if (first_event_elapsed >= first_event_timeout) break
+              Sys.sleep(1)
+            }
+            log(glue::glue("Main loop: waited {first_event_timeout} seconds but no events appeared in eventlog"))
+            cli::cli_abort("Waited {first_event_timeout} seconds but no events appeared in eventlog")
+          }
+
           # Main streaming loop
           main_loop_i <- 0
           
@@ -444,9 +467,9 @@ Stream <- R6::R6Class("Stream",
           log("Commencing main streaming loop")
           while (TRUE) {
 
-            cli::cli_h1("Main loop iteration #{main_loop_i}: {format_datetime()}")
+            cli::cli_h1("Main loop iteration #{main_loop_i}: {realtalk::format_datetime()}")
             log(glue::glue("Main loop: iteration #{main_loop_i}"))
-            do_later_now()
+            realtalk::do_later_now()
 
             # Every 10th iteration, compact the event log
             if (main_loop_i %% 10 == 0) {
@@ -505,23 +528,6 @@ Stream <- R6::R6Class("Stream",
 
             # Check event log for updates
             eventlog_current <- eventlog$as_tibble()
-
-            # If there are no events left (because the stream is still
-            # initialising), wait for some events to accumulate
-            if (nrow(eventlog_current) == 0) {
-              first_event_elapsed <- 0
-              first_event_timeout <- 10
-              while (nrow(eventlog_current) == 0) {
-                log("Main loop: waiting for first event to appear in event log")
-                eventlog_current <- eventlog$as_tibble()
-                first_event_elapsed <- first_event_elapsed + 1
-                if (first_event_elapsed >= first_event_timeout) break
-                Sys.sleep(1)
-              }
-              log(glue::glue("Main loop: waited {first_event_timeout} seconds but not events appeared in eventlog"))
-              cli::cli_abort("Waited {first_event_timeout} seconds but not events appeared in eventlog")
-            }
-
             cli::cli_alert_info("There are {nrow(eventlog_current)} events ({nrow(eventlog_current) - nrow(eventlog_processed)} new)")
             log(glue::glue("Main loop: there are {nrow(eventlog_current)} events ({nrow(eventlog_current) - nrow(eventlog_processed)} new)"))
             eventlog_new <- dplyr::anti_join(eventlog_current, eventlog_processed, by = dplyr::join_by(created_at, type, data))
@@ -721,7 +727,7 @@ Stream <- R6::R6Class("Stream",
             main_loop_i <- main_loop_i + 1
 
             # Flush pending futures
-            do_later_now()
+            realtalk::do_later_now()
             Sys.sleep(0.2)
 
           } # End of main streaming loop
