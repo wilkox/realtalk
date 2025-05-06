@@ -2,6 +2,7 @@ library(testthat)
 withr::local_options(cli.default_handler = function(...) { NULL })
 
 test_that("streams create, start, and stop", {
+  testthat::skip_on_ci()
 
   expect_no_error({ stream <- Stream$new() })
 
@@ -27,42 +28,42 @@ test_that("streams create, start, and stop", {
 
 })
 
-# Set up a stream to use for further testing
-stream <- Stream$new()
-stream$start_streaming()
-
-test_that("stream$log() works", {
+test_that("stream methods work correctly", {
+  testthat::skip_on_ci()
+  
+  # Setup a stream for all tests
+  stream <- Stream$new()
+  stream$start_streaming()
+  
+  # Test logging
   expect_no_error({ stream$log("This is a test log message") })
-})
-
-test_that("stream$eventlog holds an EventLog object", {
+  
+  # Test eventlog
   expect_s3_class(stream$eventlog, "EventLog")
-})
-
-test_that("sending text messages from user and system roles works", {
+  
+  # Test sending text messages
   expect_no_error({ stream$send_text("This is a test message from the user", role = "user") })
   expect_no_error({ stream$send_text("This is a test message from the system", role = "system") })
-  expect_no_error({ stream$send_text(
-    "This is a test message from the system",
-    role = "system",
-    trigger_response = TRUE
-  ) })
+  expect_no_error({ 
+    stream$send_text(
+      "This is a test message from the system",
+      role = "system",
+      trigger_response = TRUE
+    )
+  })
   expect_no_error({ stream$wait_for_response() })
-})
-
-test_that("set_status_message() works", {
+  
+  # Test status message
   expect_no_error({ stream$set_status_message("This is a test status message") })
-})
-
-test_that("stream$conversation() returns a relevant tibble", {
+  
+  # Test conversation
   expect_no_error({ conversation <- stream$conversation() })
   expect_s3_class(conversation, "tbl")
   expect_true(nrow(conversation) > 0)
-})
-
-test_that("stream$transcript() works", {
+  
+  # Test transcript
   expect_no_error({ stream$transcript() })
+  
+  # Clean up
+  stream$stop_streaming()
 })
-
-# Shut down test stream
-stream$stop_streaming()

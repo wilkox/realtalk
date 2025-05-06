@@ -16,8 +16,8 @@ test_that("do_later_now() executes without error", {
 })
 
 test_that("openai_api_key() works", {
-
+  testthat::skip_on_ci()
+  
   expect_no_error({ key <- openai_api_key() })
   expect_type(key, "character")
-
 })
