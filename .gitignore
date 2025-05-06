@@ -8,3 +8,7 @@ test.R
 CLAUDE.md
 **/.claude/settings.local.json
 .claude
+inst/doc
+/doc/
+/Meta/
+README.html

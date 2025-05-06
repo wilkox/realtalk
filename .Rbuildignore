@@ -1,3 +1,10 @@
 ^LICENSE\.md$
 ^\.claude$
 ^CLAUDE\.md$
+^doc$
+^Meta$
+^test\.R$
+^\.quarto$
+^README\.Rmd$
+^README\.html$
+^\.github$

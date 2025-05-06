@@ -1,6 +1,6 @@
 Package: realtalk
 Title: Interface to the OpenAI Realtime API
-Version: 0.0.0.9000
+Version: 0.1.0
 Authors@R: 
     person("David", "Wilkins", , "david@wilkox.org", role = c("aut", "cre"))
 Description: Provides tools for interacting with the OpenAI Realtime API.
@@ -23,15 +23,18 @@ Imports:
     glue,
     jsonlite,
     later,
-    lemur,
+    lifecycle,
     lubridate,
     purrr,
     stringr,
     tibble,
     websocket
 Suggests: 
+    knitr,
+    rmarkdown,
     testthat (>= 3.0.0),
     withr
 Config/testthat/edition: 3
 URL: https://github.com/wilkox/realtalk
 BugReports: https://github.com/wilkox/realtalk/issues
+VignetteBuilder: knitr

@@ -1,0 +1,166 @@
+---
+title: "Getting Started with realtalk"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Getting Started with realtalk}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  eval = FALSE  # We don't evaluate code in this vignette
+)
+```
+
+## Introduction
+
+The `realtalk` package provides an interface to the OpenAI Realtime API, enabling bidirectional streaming of text and audio content. This vignette will guide you through the basic usage of the package to create streaming sessions, send messages, and interact with the API in real-time.
+
+```{r setup}
+library(realtalk)
+```
+
+## Prerequisites
+
+Before using the `realtalk` package, you'll need:
+
+1. An OpenAI API key with access to the Realtime API
+2. The [sox](https://sox.sourceforge.net/) command-line utility installed on your system for audio processing
+
+If you use the `lemur` package for managing your OpenAI credentials, `realtalk` will automatically use your configured API key.
+
+## Creating a Streaming Session
+
+The main class in `realtalk` is `Stream`, which represents a streaming session with the OpenAI Realtime API. To create a new session:
+
+```{r}
+# Create a new Stream object
+stream <- Stream$new()
+```
+
+You can also create a Stream with a tmux split to help debug:
+
+```{r}
+# Create a Stream with a tmux split showing the log
+stream <- Stream$new(tmux_split = TRUE)
+```
+
+## Starting a Stream
+
+Once you've created a Stream object, you need to start the streaming session:
+
+```{r}
+# Start the streaming session
+stream$start_streaming(
+  api_key = "your_openai_api_key",  # Defaults to lemur::openai_api_key()
+  model = "gpt-4o-realtime-preview-2024-12-17",
+  voice = "ballad"  # OpenAI TTS voice for audio responses
+)
+```
+
+This will establish a WebSocket connection to the OpenAI API and initiate background processes for handling audio input and output.
+
+## Sending Text Messages
+
+You can send text messages to the API using the `send_text` method:
+
+```{r}
+# Send a message as the user
+stream$send_text(
+  "Hello, I'd like to learn about quantum computing.",
+  role = "user",          # "user" or "system"
+  trigger_response = TRUE # Whether to prompt the API to respond
+)
+
+# Wait for the response to complete
+stream$wait_for_response()
+```
+
+The `role` parameter can be either "user" (for regular messages) or "system" (for system instructions). Setting `trigger_response = TRUE` signals the API to generate a response.
+
+## Audio Input and Output
+
+One of the key features of the Realtime API is bidirectional audio streaming. The `Stream` class automatically:
+
+1. Captures audio from your microphone and sends it to the API
+2. Receives audio responses from the API and plays them through your speakers
+
+The audio is processed in the background, so you don't need to manage it explicitly. However, `realtalk` does provide some utility functions for working with audio:
+
+```{r}
+# Capture audio to a file for 3 seconds
+capture_audio_chunk_file("recording.wav", duration = 3)
+
+# Capture audio and encode it as base64
+audio_b64 <- capture_audio_chunk_base64(duration = 2)
+
+# Play audio from a base64 string
+play_audio_chunk(audio_b64)
+```
+
+## Accessing the Conversation
+
+The Stream class keeps track of all messages exchanged in the conversation. You can access them in two ways:
+
+```{r}
+# Get a tibble of all messages in the conversation
+conversation <- stream$conversation()
+
+# Print the conversation as a nicely formatted transcript
+stream$transcript()
+```
+
+The conversation tibble has columns for:
+- `role`: Who sent the message (user, assistant, or system)
+- `medium`: The medium of the message (text or audio)
+- `content`: The actual content of the message
+
+## Setting a Status Message
+
+You can set a status message that will be sent to the API after each assistant response:
+
+```{r}
+# Set a status message
+stream$set_status_message("You are an expert in quantum physics and should explain concepts clearly.")
+```
+
+This can be useful for providing ongoing guidance to the model.
+
+## Ending the Session
+
+When you're done with the streaming session, you should properly close it:
+
+```{r}
+# Stop the streaming session
+stream$stop_streaming()
+```
+
+This ensures that all background processes are properly terminated and resources are released.
+
+## Working with Events
+
+The `Event` and `EventLog` classes provide lower-level access to the stream of events from the API:
+
+```{r}
+# Access the event log
+events <- stream$eventlog$as_tibble()
+
+# Filter for specific event types
+response_events <- dplyr::filter(events, type == "response.text.done")
+```
+
+Most users won't need to work directly with events, but they can be useful for debugging or advanced use cases.
+
+## Conclusion
+
+The `realtalk` package provides a convenient interface to the OpenAI Realtime API, enabling you to create interactive, real-time applications with text and audio streaming. This vignette covered the basic functionality, but the package offers additional options for more advanced use cases.
+
+Remember that the OpenAI Realtime API is still evolving, and the package may be updated to accommodate changes to the API.
+
+## Further Resources
+
+- [OpenAI API Documentation](https://platform.openai.com/docs/api-reference)
+- [Package GitHub Repository](https://github.com/wilkox/realtalk)

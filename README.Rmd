@@ -1,0 +1,134 @@
+---
+output:
+  github_document:
+    html_preview: true
+    fig_width: 8
+    fig_height: 8
+---
+
+<!-- README.md is generated from README.Rmd. Please edit that file -->
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.path = "man/figures/README-",
+  out.width = "100%",
+  eval = FALSE
+)
+```
+
+# realtalk
+
+<!-- badges: start -->
+[![R-CMD-check](https://github.com/wilkox/realtalk/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/wilkox/realtalk/actions/workflows/R-CMD-check.yaml)
+[![Lifecycle: experimental](https://img.shields.io/badge/lifecycle-experimental-orange.svg)](https://lifecycle.r-lib.org/articles/stages.html#experimental)
+<!-- badges: end -->
+
+`realtalk` is an R package for interacting with the OpenAI Realtime API. It provides functionality for bidirectional streaming of text and audio to and from the OpenAI API.
+
+**Note**: This package is primarily developed for personal use but is being shared in case others find it useful. It is in early development (version 0.1.0) and the API may change.
+
+## Installation
+
+You can install the development version of `realtalk` from GitHub with:
+
+```{r}
+# install.packages("devtools")
+devtools::install_github("wilkox/realtalk")
+```
+
+## Requirements
+
+- A valid [OpenAI API key](https://platform.openai.com/api-keys) with access to the Realtime API
+- The [sox](https://sox.sourceforge.net/) command-line utility for audio capture and processing
+
+## Basic Usage
+
+### Creating a Stream
+
+The `Stream` class is the main interface to the OpenAI Realtime API:
+
+```{r}
+library(realtalk)
+
+# Create a new streaming session
+stream <- Stream$new()
+
+# Start streaming with your API key and preferred model
+stream$start_streaming(
+  api_key = Sys.getenv("OPENAI_API_KEY"), # Default is openai_api_key()
+  model = "gpt-4o-realtime-preview-2024-12-17",
+  voice = "ballad" # Choose from available OpenAI TTS voices
+)
+```
+
+### Sending Text Messages
+
+Send text messages to the API using the `send_text` method:
+
+```{r}
+# Send text as a user
+stream$send_text("Hello, I'd like to discuss AI safety.", role = "user", trigger_response = TRUE)
+
+# Wait for the complete response
+stream$wait_for_response()
+```
+
+### Using Audio
+
+The stream automatically captures and sends audio from your microphone, and plays audio responses. For additional audio utility functions:
+
+```{r}
+# Capture audio to a file
+capture_audio_chunk_file("my_recording.wav", duration = 3)
+
+# Play an audio chunk
+audio_b64 <- base64enc::base64encode("my_recording.wav")
+play_audio_chunk(audio_b64)
+```
+
+### Accessing the Conversation
+
+You can access the complete conversation history at any time:
+
+```{r}
+# Get a tibble of all messages in the conversation
+conversation <- stream$conversation()
+
+# Print a nicely formatted transcript
+stream$transcript()
+```
+
+### Ending a Session
+
+When you're done, close the stream:
+
+```{r}
+stream$stop_streaming()
+```
+
+## Event Logging
+
+The package includes an event logging system that captures all API interactions:
+
+```{r}
+# Access event log from stream
+events <- stream$events$as_tibble()
+
+# Display events in a readable format
+print(events)
+```
+
+## Further Documentation
+
+For more detailed information, check the package documentation and vignettes:
+
+```{r}
+help(package = "realtalk")
+browseVignettes("realtalk")
+```
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.

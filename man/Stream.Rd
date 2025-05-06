@@ -101,7 +101,7 @@ managed by background processes.
 \subsection{Method \code{start_streaming()}}{
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{Stream$start_streaming(
-  api_key = lemur::openai_api_key(verbose = FALSE),
+  api_key = openai_api_key(verbose = FALSE),
   model = "gpt-4o-realtime-preview-2024-12-17",
   voice = "ballad"
 )}\if{html}{\out{</div>}}
@@ -111,7 +111,7 @@ managed by background processes.
 \if{html}{\out{<div class="arguments">}}
 \describe{
 \item{\code{api_key}}{Your long-term OpenAI API key. Defaults to
-\code{lemur::openai_api_key(verbose = FALSE)}.}
+\code{openai_api_key(verbose = FALSE)}.}
 
 \item{\code{model}}{A string specifying the model. Defaults to
 \code{"gpt-4o-realtime-preview-2024-12-17"}.}

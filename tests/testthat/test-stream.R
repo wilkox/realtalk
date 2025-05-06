@@ -37,7 +37,6 @@ test_that("stream$eventlog holds an EventLog object", {
 })
 
 test_that("sending text messages from user and system roles works", {
-
   expect_no_error({ stream$send_text("This is a test message from the user", role = "user") })
   expect_no_error({ stream$send_text("This is a test message from the system", role = "system") })
   expect_no_error({ stream$send_text(
@@ -46,21 +45,16 @@ test_that("sending text messages from user and system roles works", {
     trigger_response = TRUE
   ) })
   expect_no_error({ stream$wait_for_response() })
-
 })
 
 test_that("set_status_message() works", {
-
   expect_no_error({ stream$set_status_message("This is a test status message") })
-
 })
 
 test_that("stream$conversation() returns a relevant tibble", {
-
   expect_no_error({ conversation <- stream$conversation() })
   expect_s3_class(conversation, "tbl")
   expect_true(nrow(conversation) > 0)
-
 })
 
 test_that("stream$transcript() works", {

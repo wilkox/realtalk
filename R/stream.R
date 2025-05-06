@@ -3,6 +3,7 @@
 #' @description Represents a streaming session with the OpenAI Realtime API
 #'
 #' @export
+#' @importFrom lifecycle deprecate_soft
 Stream <- R6::R6Class("Stream",
 
   public = list(
@@ -20,7 +21,7 @@ Stream <- R6::R6Class("Stream",
         cli::cli_abort("Attempted to log a non-text entry")
         print(entry)
       }
-      entry <- glue::glue("[{realtalk::timestamp()}] {entry}")
+      entry <- glue::glue("[{format_datetime()}] {entry}")
       connection <- file(private$log_path, "at") # "at" is appending in text mode
       writeLines(entry, connection)
       close(connection)
@@ -184,19 +185,30 @@ Stream <- R6::R6Class("Stream",
     #' managed by background processes. 
     #'
     #' @param api_key Your long-term OpenAI API key. Defaults to
-    #' `lemur::openai_api_key(verbose = FALSE)`.
+    #' `openai_api_key(verbose = FALSE)`.
     #' @param model A string specifying the model. Defaults to
     #' `"gpt-4o-realtime-preview-2024-12-17"`.
     #' @param voice A string specifying the voice to use. Defaults to "ballad".
     #' 
     start_streaming = function(
-      api_key = lemur::openai_api_key(verbose = FALSE),
+      api_key = openai_api_key(verbose = FALSE),
       model = "gpt-4o-realtime-preview-2024-12-17",
       voice = "ballad"
     ) {
 
       # Set up the background process
       self$log("start_streaming: setting up background process for main loop")
+      # Create temporary files for stderr and stdout with descriptive names
+      bg_stderr_file <- fs::file_temp(pattern = "bg_stderr_", ext = "log")
+      bg_stdout_file <- fs::file_temp(pattern = "bg_stdout_", ext = "log")
+      self$log(glue::glue("start_streaming: using stderr file: {bg_stderr_file}"))
+      self$log(glue::glue("start_streaming: using stdout file: {bg_stdout_file}"))
+      
+      # Store the paths for later reference
+      private$bg_stderr_file <- bg_stderr_file
+      private$bg_stdout_file <- bg_stdout_file
+      
+      # Initialize the background process with redirected output to files
       private$bg_process <- callr::r_bg(
         function(
           api_key,
@@ -238,7 +250,7 @@ Stream <- R6::R6Class("Stream",
           # Define callback event for WebSocket receiving a message
           websocket$onMessage(function(event) {
             data <- jsonlite::fromJSON(event$data)
-            event <- realtalk::Event$new(data) 
+            event <- Event$new(data) 
             eventlog$add(event)
 
             # Stream audio deltas directly into the audio out buffer as b64
@@ -253,25 +265,39 @@ Stream <- R6::R6Class("Stream",
           # Define callback event for WebSocket throwing an error
           websocket$onError(function(event) {
             cli::cli_alert_danger("WebSocket error: {event$message}")
-            fs::file_delete(stream_ready_path)
+            # Remove ready signal with lock protection
+            stream_ready_lock_path <- fs::path(stream_ready_path, ext = "lock")
+            stream_ready_lock <- filelock::lock(stream_ready_lock_path, timeout = 10000)
+            if (!is.null(stream_ready_lock)) {
+              fs::file_delete(stream_ready_path)
+              filelock::unlock(stream_ready_lock)
+              log("Removed stream ready signal due to WebSocket error")
+            }
           })
           
           # Define callback event for WebSocket closing
           websocket$onClose(function(event) {
             cli::cli_alert_success("WebSocket connection closed")
-            fs::file_delete(stream_ready_path)
+            # Remove ready signal with lock protection
+            stream_ready_lock_path <- fs::path(stream_ready_path, ext = "lock")
+            stream_ready_lock <- filelock::lock(stream_ready_lock_path, timeout = 10000)
+            if (!is.null(stream_ready_lock)) {
+              fs::file_delete(stream_ready_path)
+              filelock::unlock(stream_ready_lock)
+              log("Removed stream ready signal due to WebSocket closing")
+            }
           })
           
           # Connect to the WebSocket server
           cli::cli_alert_info("Opening WebSocket connection")
           log("Opening WebSocket connection")
           websocket$connect()
-          realtalk::do_later_now()
+          do_later_now()
           start_time <- Sys.time()
           timeout <- 10  # 10 seconds timeout
           while (websocket$readyState() == 0L && difftime(Sys.time(), start_time, units = "secs") < timeout) {
             Sys.sleep(0.1)
-            realtalk::do_later_now()
+            do_later_now()
           }
           if (websocket$readyState() != 1L) {
             cli::cli_abort("Failed to establish WebSocket connection after {timeout} seconds")
@@ -296,7 +322,7 @@ Stream <- R6::R6Class("Stream",
           websocket$send(jsonlite::toJSON(payload, auto_unbox = FALSE))
 
           # Flush the future queue
-          realtalk::do_later_now()
+          do_later_now()
 
           # Initialise audio I/O buffers
           audio_in_buffer_file <- fs::file_temp(pattern = "audio_in_buffer", ext = "wav")
@@ -327,7 +353,7 @@ Stream <- R6::R6Class("Stream",
                   current_line <- length(audio_out_buffer)
 
                   # Play new audio
-                  realtalk::play_audio_chunk(new_audio_b64)
+                  play_audio_chunk(new_audio_b64)
                 } else {
 
                   # Wait for more audio to appear in the buffer, with the
@@ -400,16 +426,27 @@ Stream <- R6::R6Class("Stream",
 
           # Main streaming loop
           main_loop_i <- 0
+          
+          # Signal that the stream is ready using filelock to ensure thread safety
+          stream_ready_lock_path <- fs::path(stream_ready_path, ext = "lock")
+          stream_ready_lock <- filelock::lock(stream_ready_lock_path, timeout = 10000)
+          if (is.null(stream_ready_lock)) {
+            log("Failed to acquire lock for stream_ready_path")
+            cli::cli_abort("Failed to acquire lock for stream ready signal")
+          }
           fs::file_touch(stream_ready_path)
+          filelock::unlock(stream_ready_lock)
+          log("Set stream ready signal with lock protection")
+          
           audio_in_last_processed_byte <- 0
           eventlog_processed <- eventlog$as_tibble()[0, ]
           n_response_done_status_message <- -1
           log("Commencing main streaming loop")
           while (TRUE) {
 
-            cli::cli_h1("Main loop iteration #{main_loop_i}: {realtalk::timestamp()}")
+            cli::cli_h1("Main loop iteration #{main_loop_i}: {format_datetime()}")
             log(glue::glue("Main loop: iteration #{main_loop_i}"))
-            realtalk::do_later_now()
+            do_later_now()
 
             # Every 10th iteration, compact the event log
             if (main_loop_i %% 10 == 0) {
@@ -684,7 +721,7 @@ Stream <- R6::R6Class("Stream",
             main_loop_i <- main_loop_i + 1
 
             # Flush pending futures
-            realtalk::do_later_now()
+            do_later_now()
             Sys.sleep(0.2)
 
           } # End of main streaming loop
@@ -706,24 +743,146 @@ Stream <- R6::R6Class("Stream",
           eventlog = self$eventlog,
           log = self$log
         ),
-        stderr = fs::file_temp(), # These redirects are needed as keepalives for
-        stdout = fs::file_temp()  # the background process
+        stderr = bg_stderr_file, # Use the files we created for better debugging
+        stdout = bg_stdout_file
       ) # End of callr::r_bg call for main loop
 
       # Wait until stream initiation signal received
       stream_ready_timer <- 0
-      stream_ready_timeout <- 10
+      stream_ready_timeout <- 60
       stream_ready_polling_interval <- 1
       cli::cli_alert_info("Initialising stream...")
       self$log("start_streaming: waiting for confirmation that stream is ready")
-      while (! fs::file_exists(private$stream_ready_path)) {
-        stream_ready_timer <- stream_ready_timer + stream_ready_polling_interval
-        if (stream_ready_timer >= stream_ready_timeout) {
-          self$log(glue::glue("start_streaming: timed out waiting for stream to intialise after {stream_ready_timer} seconds"))
-          cli::cli_abort("Timed out waiting for stream to intialise after {stream_ready_timer} seconds")
+      
+      # Track background process status
+      stream_ready_lock_path <- fs::path(private$stream_ready_path, ext = "lock")
+      while (TRUE) {
+        # Check stream ready status with proper locking
+        is_ready <- FALSE
+        ready_lock <- filelock::lock(stream_ready_lock_path, timeout = 1000)
+        if (!is.null(ready_lock)) {
+          is_ready <- fs::file_exists(private$stream_ready_path)
+          filelock::unlock(ready_lock)
         }
+        
+        if (is_ready) {
+          self$log("start_streaming: detected stream ready signal")
+          break
+        }
+        stream_ready_timer <- stream_ready_timer + stream_ready_polling_interval
+        
+        # Check if the background process is still alive
+        if (! private$bg_process$is_alive()) {
+          # Get the error information directly from the log files we created
+          self$log("start_streaming: background process died unexpectedly")
+          
+          # Get exit status 
+          exit_status <- tryCatch({
+            private$bg_process$get_exit_status()
+          }, error = function(e) {
+            self$log(glue::glue("start_streaming: could not get exit status: {e$message}"))
+            return("unknown")
+          })
+          
+          self$log(glue::glue("start_streaming: background process exit status: {exit_status}"))
+          
+          # Read stderr and stdout from files
+          stderr_output <- tryCatch({
+            if (fs::file_exists(private$bg_stderr_file)) {
+              stderr <- readLines(private$bg_stderr_file, warn = FALSE)
+              if (length(stderr) > 0) {
+                paste(stderr, collapse = "\n")
+              } else {
+                "No stderr output"
+              }
+            } else {
+              "stderr file does not exist"
+            }
+          }, error = function(e) {
+            self$log(glue::glue("start_streaming: error reading stderr file: {e$message}"))
+            return("Error reading stderr")
+          })
+          
+          stdout_output <- tryCatch({
+            if (fs::file_exists(private$bg_stdout_file)) {
+              stdout <- readLines(private$bg_stdout_file, warn = FALSE)
+              if (length(stdout) > 0) {
+                paste(stdout, collapse = "\n")
+              } else {
+                "No stdout output"
+              }
+            } else {
+              "stdout file does not exist"
+            }
+          }, error = function(e) {
+            self$log(glue::glue("start_streaming: error reading stdout file: {e$message}"))
+            return("Error reading stdout")
+          })
+          
+          # Log the outputs
+          self$log(glue::glue("start_streaming: stderr output: {stderr_output}"))
+          self$log(glue::glue("start_streaming: stdout output: {stdout_output}"))
+          
+          # Try to determine if this is an API issue
+          api_error <- FALSE
+          if (grepl("OpenAI API", stderr_output, fixed = TRUE) || 
+              grepl("OpenAI API", stdout_output, fixed = TRUE) ||
+              grepl("Authorization", stderr_output, fixed = TRUE) ||
+              grepl("WebSocket", stderr_output, fixed = TRUE)) {
+            api_error <- TRUE
+          }
+          
+          # Build appropriate error message
+          if (api_error) {
+            cli::cli_abort(c(
+              "Background stream process terminated unexpectedly - API connection issue",
+              "i" = "Exit status: {exit_status}",
+              "i" = "Please check your OpenAI API key and account status",
+              "i" = "The OpenAI Realtime API may be experiencing issues",
+              "x" = "Error details: {stderr_output}"
+            ))
+          } else {
+            cli::cli_abort(c(
+              "Background stream process terminated unexpectedly",
+              "i" = "Exit status: {exit_status}",
+              "i" = "Check stderr and stdout for details",
+              "i" = "If no useful information is available, try running again with debug logging",
+              "i" = "stderr: {stderr_output}",
+              "i" = "stdout: {stdout_output}"
+            ))
+          }
+        }
+        
+        # Check for timeout
+        if (stream_ready_timer >= stream_ready_timeout) {
+          # Attempt to collect additional diagnostic information
+          api_status <- tryCatch({
+            "OpenAI API status could not be determined"
+          }, error = function(e) {
+            "Failed to check API status"
+          })
+          
+          self$log(glue::glue("start_streaming: timed out waiting for stream to initialise after {stream_ready_timeout} seconds"))
+          self$log(glue::glue("start_streaming: API status: {api_status}"))
+          
+          # Force kill the background process if it's still running
+          if (private$bg_process$is_alive()) {
+            private$bg_process$kill()
+            self$log("start_streaming: killed background process")
+          }
+          
+          cli::cli_abort(c(
+            "Timed out waiting for stream to initialise after {stream_ready_timeout} seconds",
+            "i" = "API status: {api_status}",
+            "i" = "Try increasing the timeout or check your internet connection",
+            "i" = "The stream may be experiencing rate limiting from OpenAI",
+            "i" = "Check for any error messages in the preceding output"
+          ))
+        }
+        
         Sys.sleep(stream_ready_polling_interval)
       }
+      
       cli::cli_alert_success("Stream initialised")
       self$log("start_streaming: stream initialised")
     },
@@ -732,7 +891,20 @@ Stream <- R6::R6Class("Stream",
     #'
     #' @return A logical value indicating if the stream is ready to use
     is_ready = function() {
-      fs::file_exists(private$stream_ready_path) |> unname()
+      # Check stream ready status with proper locking
+      stream_ready_lock_path <- fs::path(private$stream_ready_path, ext = "lock")
+      ready_lock <- filelock::lock(stream_ready_lock_path, timeout = 1000)
+      
+      if (is.null(ready_lock)) {
+        self$log("is_ready: failed to acquire lock to check stream ready status")
+        return(FALSE)
+      }
+      
+      # Check if ready file exists
+      is_ready <- fs::file_exists(private$stream_ready_path)
+      filelock::unlock(ready_lock)
+      
+      return(is_ready)
     },
 
     #' Stop the streaming session
@@ -763,8 +935,18 @@ Stream <- R6::R6Class("Stream",
       cli::cli_alert_success("Stream shut down")
       self$log("stop_streaming: stream shut down")
 
-      # Remove the stream ready file
-      fs::file_delete(private$stream_ready_path)
+      # Remove the stream ready file with proper locking
+      stream_ready_lock_path <- fs::path(private$stream_ready_path, ext = "lock")
+      ready_lock <- filelock::lock(stream_ready_lock_path, timeout = 10000)
+      if (!is.null(ready_lock)) {
+        if (fs::file_exists(private$stream_ready_path)) {
+          fs::file_delete(private$stream_ready_path)
+          self$log("stop_streaming: removed stream ready signal with lock protection")
+        }
+        filelock::unlock(ready_lock)
+      } else {
+        self$log("stop_streaming: could not acquire lock to remove stream ready signal")
+      }
 
     },
 
@@ -830,7 +1012,7 @@ Stream <- R6::R6Class("Stream",
       }
 
       # Initialise the event log
-      self$eventlog <- realtalk::EventLog$new()
+      self$eventlog <- EventLog$new()
 
     },
 
@@ -918,7 +1100,11 @@ Stream <- R6::R6Class("Stream",
     status_message_path = NULL,
 
     # Path to the local log file (as distinct from the stream EventLog)
-    log_path = NULL
+    log_path = NULL,
+    
+    # Path to the stdout and stderr files for the background process
+    bg_stdout_file = NULL,
+    bg_stderr_file = NULL
 
   )
 )

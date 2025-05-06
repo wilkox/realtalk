@@ -20,7 +20,6 @@
 #' @import glue 
 #' @importFrom jsonlite fromJSON toJSON unbox
 #' @import later 
-#' @import lemur 
 #' @import lubridate 
 #' @import purrr 
 #' @import stringr 
