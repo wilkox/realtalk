@@ -60,7 +60,7 @@ Wait until the current or next response is finished}
 \describe{
 \item{\code{timeout}}{Maximum time in seconds to wait before returning an
 error, defaults to 60
-Return all text and transcibed audio messages in the stream}
+Return all text and transcribed audio messages in the stream}
 }
 \if{html}{\out{</div>}}
 }
@@ -86,15 +86,19 @@ Print a formatted transcript of the stream
 \if{html}{\out{<div class="r">}}\preformatted{Stream$transcript()}\if{html}{\out{</div>}}
 }
 
+\subsection{Returns}{
+NULL, invisibly
+Start the streaming session
+
+Opens a WebSocket streaming connection to the OpenAI Realtime API and
+starts bidirectional text and audio streaming. The streaming loops are
+managed by background processes.
+}
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-Stream-start_streaming"></a>}}
 \if{latex}{\out{\hypertarget{method-Stream-start_streaming}{}}}
 \subsection{Method \code{start_streaming()}}{
-Open a WebSocket streaming connection to OpenAI Realtime API and begin
-bidirectional text and audio streaming. The streaming loops are
-encapsulated in a callr subprocess, which is stored in the bg_process
-slot.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{Stream$start_streaming(
   api_key = lemur::openai_api_key(verbose = FALSE),
@@ -107,20 +111,16 @@ slot.
 \if{html}{\out{<div class="arguments">}}
 \describe{
 \item{\code{api_key}}{Your long-term OpenAI API key. Defaults to
-\code{Sys.getenv("OPENAI_API_KEY")}.}
+\code{lemur::openai_api_key(verbose = FALSE)}.}
 
-\item{\code{model}}{A character string specifying the model. Defaults to
-\code{lemur::openai_api_key()}.}
+\item{\code{model}}{A string specifying the model. Defaults to
+\code{"gpt-4o-realtime-preview-2024-12-17"}.}
 
-\item{\code{voice}}{A character string specifying the voice to use. Defaults to
-"ballad".}
+\item{\code{voice}}{A string specifying the voice to use. Defaults to "ballad".
+
+Report whether the stream is ready}
 }
 \if{html}{\out{</div>}}
-}
-\subsection{Returns}{
-No return
-
-Reports whether the stream is ready
 }
 }
 \if{html}{\out{<hr>}}
@@ -132,33 +132,42 @@ Reports whether the stream is ready
 }
 
 \subsection{Returns}{
-A logical value
+A logical value indicating if the stream is ready to use
+Stop the streaming session
+
+Disconnects from the API and shuts down background I/O processes.
 }
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-Stream-stop_streaming"></a>}}
 \if{latex}{\out{\hypertarget{method-Stream-stop_streaming}{}}}
 \subsection{Method \code{stop_streaming()}}{
-Ends live audio streaming
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{Stream$stop_streaming()}\if{html}{\out{</div>}}
 }
 
 \subsection{Returns}{
-No return
+NULL, invisibly
+Set up a new Stream
 }
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-Stream-new"></a>}}
 \if{latex}{\out{\hypertarget{method-Stream-new}{}}}
 \subsection{Method \code{new()}}{
-Set up the Stream object
-
-Send a text message to the stream
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{Stream$new(tmux_split = FALSE)}\if{html}{\out{</div>}}
 }
 
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{tmux_split}}{Logical, whether to open the log file in a new tmux
+split. Defaults to FALSE.
+Send a text message to the stream}
+}
+\if{html}{\out{</div>}}
+}
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-Stream-send_text"></a>}}
@@ -171,17 +180,16 @@ Send a text message to the stream
 \subsection{Arguments}{
 \if{html}{\out{<div class="arguments">}}
 \describe{
-\item{\code{text}}{A character string to send.}
+\item{\code{text}}{A string to send}
 
-\item{\code{role}}{The role, either "user" (default) or "system".}
+\item{\code{role}}{The role, either "user" (default) or "system"}
 
-\item{\code{trigger_response}}{Whether to send a "response.create" signal to
-trigger a response. Defaults to FALSE
-
+\item{\code{trigger_response}}{Whether to trigger a response from the API.
+Defaults to FALSE
 Set the status message
 
 The status message is sent (as a text message with the 'system' role)
-after each system audio output message}
+after each assistant audio output message.}
 }
 \if{html}{\out{</div>}}
 }
@@ -194,6 +202,13 @@ after each system audio output message}
 \if{html}{\out{<div class="r">}}\preformatted{Stream$set_status_message(status_message)}\if{html}{\out{</div>}}
 }
 
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{status_message}}{String, the status message to be set.}
+}
+\if{html}{\out{</div>}}
+}
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-Stream-clone"></a>}}

@@ -45,7 +45,7 @@ Stream <- R6::R6Class("Stream",
       }
     },
 
-    #' Return all text and transcibed audio messages in the stream
+    #' Return all text and transcribed audio messages in the stream
     #'
     #' @return A tibble of all text and transcribed audio messages in the stream
     conversation = function() {
@@ -134,6 +134,8 @@ Stream <- R6::R6Class("Stream",
     },
 
     #' Print a formatted transcript of the stream
+    #' 
+    #' @return NULL, invisibly
     transcript = function() {
 
       # Print a neat transcript
@@ -177,9 +179,9 @@ Stream <- R6::R6Class("Stream",
     #' managed by background processes. 
     #'
     #' @param api_key Your long-term OpenAI API key. Defaults to
-    #' `Sys.getenv("OPENAI_API_KEY")`.
+    #' `lemur::openai_api_key(verbose = FALSE)`.
     #' @param model A string specifying the model. Defaults to
-    #' `lemur::openai_api_key()`.
+    #' `"gpt-4o-realtime-preview-2024-12-17"`.
     #' @param voice A string specifying the voice to use. Defaults to "ballad".
     #' 
     start_streaming = function(
@@ -716,7 +718,7 @@ Stream <- R6::R6Class("Stream",
 
     #' Report whether the stream is ready
     #'
-    #' @return A logical value
+    #' @return A logical value indicating if the stream is ready to use
     is_ready = function() {
       fs::file_exists(private$stream_ready_path) |> unname()
     },
@@ -724,6 +726,8 @@ Stream <- R6::R6Class("Stream",
     #' Stop the streaming session
     #'
     #' Disconnects from the API and shuts down background I/O processes.
+    #' 
+    #' @return NULL, invisibly
     stop_streaming = function() {
 
       self$log("stop_streaming: called")
@@ -754,6 +758,8 @@ Stream <- R6::R6Class("Stream",
 
     #' Set up a new Stream
     #'
+    #' @param tmux_split Logical, whether to open the log file in a new tmux
+    #' split. Defaults to FALSE.
     initialize = function(tmux_split = FALSE) {
 
       # Set up the local log file and logging function
@@ -890,6 +896,8 @@ Stream <- R6::R6Class("Stream",
     #'
     #' The status message is sent (as a text message with the 'system' role)
     #' after each assistant audio output message.
+    #'
+    #' @param status_message String, the status message to be set.
     set_status_message = function(status_message) {
       checkmate::qassert(status_message, "s1")
 
