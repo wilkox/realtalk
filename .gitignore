@@ -5,3 +5,7 @@
 .DS_Store
 .quarto
 test.R
+CLAUDE.md
+
+**/.claude/settings.local.json
+.claude
