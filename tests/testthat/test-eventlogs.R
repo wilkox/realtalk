@@ -15,8 +15,8 @@ test_that("EventLogs can be created, add events, and access events", {
   expect_equal(nrow(el_tbl), 1)
   expect_s3_class(el_tbl, "tbl")
 
-  # Printing events - capture output instead of printing to terminal
-  output <- capture.output(eventlog$print())
+  # Printing EventLogs
+  expect_no_error({ output <- capture.output(eventlog$print()) })
   expect_true(length(output) > 0)
   expect_true(any(grepl("test_event", output)))
 
