@@ -1,12 +1,22 @@
 #' R6 Class Representing a Log of Events in a Stream
 #'
+#' @description
+#' The EventLog class provides a persistent, file-backed storage system for Event objects
+#' in a Stream. It handles serialization, locking, and retrieval of events. The class
+#' uses a binary file to store serialized events with length markers for efficient access.
+#'
 #' @export
 EventLog <- R6::R6Class("EventLog",
 
   public = list(
 
     #' @description
-    #' Create an EventLog
+    #' Create a new EventLog
+    #' 
+    #' Initializes a new file-backed EventLog with a temporary file to store events and
+    #' a lock file to manage concurrent access.
+    #' 
+    #' @return A new EventLog object
     initialize = function() {
       # Binary log file for individual serialized events
       private$log_path <- fs::file_temp(pattern = "events_log", ext = "bin")
@@ -19,8 +29,9 @@ EventLog <- R6::R6Class("EventLog",
     },
 
     #' @description
-    #' Add an Event
-    #' @param event An Event object
+    #' Add an Event to the EventLog
+    #' @param event An Event object to add to the log
+    #' @return Invisibly returns the EventLog object (for method chaining)
     add = function(event) {
       # Check that the object to be added is an event
       checkmate::assertR6(event, classes = "Event")
@@ -58,6 +69,7 @@ EventLog <- R6::R6Class("EventLog",
 
     #' @description
     #' Return the eventlog as a tibble
+    #' @return A tibble with columns for created_at, type, and data for each Event
     as_tibble = function() {
       # Acquire lock with backoff
       private$acquire_lock()
@@ -122,12 +134,19 @@ EventLog <- R6::R6Class("EventLog",
 
     #' @description
     #' Print the eventlog
+    #' @return Invisibly returns the printed tibble
     print = function() {
       print(self$as_tibble())
     },
     
     #' @description
     #' Compact the log file to optimize storage and reading
+    #' 
+    #' This method reads all events from the log file and writes them back
+    #' to a new file in a more compact format. This can improve performance
+    #' after many events have been added and removed.
+    #' 
+    #' @return Invisibly returns the EventLog object (for method chaining)
     compact = function() {
       # Acquire lock with backoff
       private$acquire_lock()

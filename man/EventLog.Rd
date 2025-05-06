@@ -4,9 +4,9 @@
 \alias{EventLog}
 \title{R6 Class Representing a Log of Events in a Stream}
 \description{
-R6 Class Representing a Log of Events in a Stream
-
-R6 Class Representing a Log of Events in a Stream
+The EventLog class provides a persistent, file-backed storage system for Event objects
+in a Stream. It handles serialization, locking, and retrieval of events. The class
+uses a binary file to store serialized events with length markers for efficient access.
 }
 \section{Methods}{
 \subsection{Public methods}{
@@ -23,17 +23,23 @@ R6 Class Representing a Log of Events in a Stream
 \if{html}{\out{<a id="method-EventLog-new"></a>}}
 \if{latex}{\out{\hypertarget{method-EventLog-new}{}}}
 \subsection{Method \code{new()}}{
-Create an EventLog
+Create a new EventLog
+
+Initializes a new file-backed EventLog with a temporary file to store events and
+a lock file to manage concurrent access.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{EventLog$new()}\if{html}{\out{</div>}}
 }
 
+\subsection{Returns}{
+A new EventLog object
+}
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-EventLog-add"></a>}}
 \if{latex}{\out{\hypertarget{method-EventLog-add}{}}}
 \subsection{Method \code{add()}}{
-Add an Event
+Add an Event to the EventLog
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{EventLog$add(event)}\if{html}{\out{</div>}}
 }
@@ -41,9 +47,12 @@ Add an Event
 \subsection{Arguments}{
 \if{html}{\out{<div class="arguments">}}
 \describe{
-\item{\code{event}}{An Event object}
+\item{\code{event}}{An Event object to add to the log}
 }
 \if{html}{\out{</div>}}
+}
+\subsection{Returns}{
+Invisibly returns the EventLog object (for method chaining)
 }
 }
 \if{html}{\out{<hr>}}
@@ -55,6 +64,9 @@ Return the eventlog as a tibble
 \if{html}{\out{<div class="r">}}\preformatted{EventLog$as_tibble()}\if{html}{\out{</div>}}
 }
 
+\subsection{Returns}{
+A tibble with columns for created_at, type, and data for each Event
+}
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-EventLog-print"></a>}}
@@ -65,16 +77,26 @@ Print the eventlog
 \if{html}{\out{<div class="r">}}\preformatted{EventLog$print()}\if{html}{\out{</div>}}
 }
 
+\subsection{Returns}{
+Invisibly returns the printed tibble
+}
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-EventLog-compact"></a>}}
 \if{latex}{\out{\hypertarget{method-EventLog-compact}{}}}
 \subsection{Method \code{compact()}}{
 Compact the log file to optimize storage and reading
+
+This method reads all events from the log file and writes them back
+to a new file in a more compact format. This can improve performance
+after many events have been added and removed.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{EventLog$compact()}\if{html}{\out{</div>}}
 }
 
+\subsection{Returns}{
+Invisibly returns the EventLog object (for method chaining)
+}
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-EventLog-clone"></a>}}
