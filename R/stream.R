@@ -199,7 +199,6 @@ Stream <- R6::R6Class("Stream",
           voice,
           bg_close_path,
           text_in_path,
-          text_in_lock,
           status_message_path,
           stream_ready_path,
           audio_out_buffer_path,
@@ -566,10 +565,15 @@ Stream <- R6::R6Class("Stream",
               log("Main loop: API is currently responding, will buffer text in until response complete")
             } else {
               
-              # Check if there is anything in the text in buffer
-              fs::file_create(text_in_lock)
+              # Get a lock on the text in buffer file
+              lck <- filelock::lock(fs::path(text_in_path, ext = "lock"), timeout = 60000)
+              if (is.null(lck)) {
+                log("Failed to acquire lock on text in buffer file")
+                cli::cli_abort("Failed to acquire lock on text in buffer file")
+              }
+              
+              # Read the text in buffer
               text_in_buffer <- readRDS(text_in_path)
-              fs::file_delete(text_in_lock)
               cli::cli_alert_info("Text in buffer has {nrow(text_in_buffer)} items")
               log(glue::glue("Main loop: text in buffer has {nrow(text_in_buffer)} items"))
 
@@ -606,13 +610,17 @@ Stream <- R6::R6Class("Stream",
                 }
 
                 # Wipe the text in buffer
-                fs::file_create(text_in_lock)
                 text_in <- tibble::tibble(role = character(0), trigger_response = logical(0), text = character(0))
                 saveRDS(text_in, text_in_path)
-                fs::file_delete(text_in_lock)
+                
+                # Relinquish the lock
+                lck <- filelock::unlock(lck)
 
                 cli::cli_alert_success("Finished streaming system text in")
                 log("Main loop: finished streaming new text in")
+              } else {
+                # Relinquish the lock if we didn't process anything
+                lck <- filelock::unlock(lck)
               }
 
             }
@@ -687,7 +695,6 @@ Stream <- R6::R6Class("Stream",
           voice = voice,
           bg_close_path = private$bg_close_path,
           text_in_path = private$text_in_path,
-          text_in_lock = private$text_in_lock,
           status_message_path = private$status_message_path,
           stream_ready_path = private$stream_ready_path,
           audio_out_buffer_path = private$audio_out_buffer_path,
@@ -787,13 +794,11 @@ Stream <- R6::R6Class("Stream",
       private$bg_close_path <- fs::file_temp(pattern = "background_close_signal")
       self$log(glue::glue("bg_close_path is {private$bg_close_path}"))
 
-      # Set the text input buffer file paths
+      # Set the text input buffer file path
       private$text_in_path <- fs::file_temp(pattern = "text_in_buffer", ext = "rds")
       text_in <- tibble::tibble(role = character(0), trigger_response = logical(0), text = character(0))
       saveRDS(text_in, private$text_in_path)
-      self$log(glue::glue("text_in_path is {private$system_text_in_path}"))
-      private$text_in_lock <- fs::file_temp(pattern = "text_in_lock")
-      self$log(glue::glue("text_in_lock is {private$text_in_lock}"))
+      self$log(glue::glue("text_in_path is {private$text_in_path}"))
 
       # Set the status message buffer file path
       private$status_message_path <- fs::file_temp(pattern = "status_message", ext = "rds")
@@ -839,36 +844,11 @@ Stream <- R6::R6Class("Stream",
     #' Defaults to FALSE
     send_text = function(text, role = "user", trigger_response = FALSE) {
 
-      # Use a more robust approach to file locking
-      max_attempts <- 10
-      attempt <- 0
-      lock_success <- FALSE
-      
-      while (attempt < max_attempts && !lock_success) {
-        attempt <- attempt + 1
-        
-        # Try to create the lock file
-        tryCatch({
-          # Try to atomically create the lock file
-          # If the file already exists, this will fail
-          if (!fs::file_exists(private$text_in_lock)) {
-            fs::file_create(private$text_in_lock)
-            lock_success <- TRUE
-          } else {
-            # Wait a random amount of time before retrying
-            # This helps prevent processes from continually colliding
-            Sys.sleep(runif(1, min = 0.1, max = 0.5))
-          }
-        }, error = function(e) {
-          # If we couldn't create the lock file, wait and try again
-          self$log(glue::glue("Failed to create lock file on attempt {attempt}: {e$message}"))
-          Sys.sleep(runif(1, min = 0.1, max = 0.5))
-        })
-      }
-      
-      if (! lock_success) {
-        self$log("Failed to acquire lock after maximum attempts")
-        cli::cli_abort("Failed to acquire text in buffer lock after {max_attempts} attempts")
+      # Get a lock on the text input buffer file
+      lck <- filelock::lock(fs::path(private$text_in_path, ext = "lock"), timeout = 60000)
+      if (is.null(lck)) {
+        self$log("Failed to acquire lock on text input buffer file")
+        cli::cli_abort("Failed to acquire lock on text input buffer file")
       }
       
       # We have the lock, now operate on the file
@@ -881,14 +861,8 @@ Stream <- R6::R6Class("Stream",
         self$log(glue::glue("Error while processing text buffer: {e$message}"))
         cli::cli_abort("Error while processing text buffer: {e$message}")
       }, finally = {
-        # Make sure we always try to release the lock, even if an error occurred
-        tryCatch({
-          if (fs::file_exists(private$text_in_lock)) {
-            fs::file_delete(private$text_in_lock)
-          }
-        }, error = function(e) {
-          self$log(glue::glue("Warning: Failed to release lock: {e$message}"))
-        })
+        # Relinquish the lock
+        lck <- filelock::unlock(lck)
       })
     },
 
@@ -930,9 +904,6 @@ Stream <- R6::R6Class("Stream",
 
     # Path to the file with the text input buffer (serialised tibble)
     text_in_path = NULL,
-
-    # Lockfile for the text input buffer
-    text_in_lock = NULL,
 
     # Path to file containing the audio out buffer. New audio response deltas
     # are appended to this buffer.
