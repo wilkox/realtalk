@@ -20,7 +20,6 @@ EventLog <- R6::R6Class("EventLog",
     initialize = function() {
       # Binary log file for individual serialized events
       private$log_path <- fs::file_temp(pattern = "events_log", ext = "bin")
-      private$log_lock <- fs::file_temp(pattern = "events_log_lockfile")
       
       # Create empty log file if it doesn't exist
       if (!fs::file_exists(private$log_path)) {
@@ -36,8 +35,8 @@ EventLog <- R6::R6Class("EventLog",
       # Check that the object to be added is an event
       checkmate::assertR6(event, classes = "Event")
       
-      # Acquire lock with backoff
-      private$acquire_lock()
+      # Acquire lock
+      lck <- private$acquire_lock()
       
       # Open the log file in append binary mode
       tryCatch({
@@ -56,12 +55,12 @@ EventLog <- R6::R6Class("EventLog",
       }, 
       error = function(e) {
         # Release lock even if an error occurs
-        private$release_lock()
+        private$release_lock(lck)
         stop(e)
       },
       finally = {
         # Release lock in all cases
-        private$release_lock()
+        private$release_lock(lck)
       })
       
       invisible(self)
@@ -71,8 +70,8 @@ EventLog <- R6::R6Class("EventLog",
     #' Return the eventlog as a tibble
     #' @return A tibble with columns for created_at, type, and data for each Event
     as_tibble = function() {
-      # Acquire lock with backoff
-      private$acquire_lock()
+      # Acquire lock
+      lck <- private$acquire_lock()
       
       # Initialize empty result
       events <- list()
@@ -111,12 +110,12 @@ EventLog <- R6::R6Class("EventLog",
       },
       error = function(e) {
         # Release lock even if an error occurs
-        private$release_lock()
+        private$release_lock(lck)
         stop(e)
       },
       finally = {
         # Release lock in all cases
-        private$release_lock()
+        private$release_lock(lck)
       })
       
       # Convert events to tibbles and combine
@@ -148,8 +147,8 @@ EventLog <- R6::R6Class("EventLog",
     #' 
     #' @return Invisibly returns the EventLog object (for method chaining)
     compact = function() {
-      # Acquire lock with backoff
-      private$acquire_lock()
+      # Acquire lock
+      lck <- private$acquire_lock()
       
       # Initialize empty result
       events <- list()
@@ -208,12 +207,12 @@ EventLog <- R6::R6Class("EventLog",
       },
       error = function(e) {
         # Release lock even if an error occurs
-        private$release_lock()
+        private$release_lock(lck)
         stop(e)
       },
       finally = {
         # Release lock in all cases
-        private$release_lock()
+        private$release_lock(lck)
       })
       
       invisible(self)
@@ -224,59 +223,21 @@ EventLog <- R6::R6Class("EventLog",
     # Path to the log file
     log_path = NULL,
     
-    # Path to the log file lock
-    log_lock = NULL,
-    
-    # Acquire lock with exponential backoff
+    # Acquire lock using filelock package
     acquire_lock = function() {
-      # Initialize variables for exponential backoff
-      attempts <- 0
-      max_attempts <- 15  # Maximum number of retry attempts
-      base_wait_time <- 0.01  # Start with 10ms
-      max_wait_time <- 2  # Maximum wait time in seconds
-      
-      while (TRUE) {
-        # Check if lock file exists
-        if (!fs::file_exists(private$log_lock)) {
-          # Try to create the lock file
-          tryCatch({
-            fs::file_touch(private$log_lock)
-            # Successfully acquired lock
-            return(TRUE)
-          }, error = function(e) {
-            # Failed to create lock file, will retry
-          })
-        }
-        
-        # Increment attempts
-        attempts <- attempts + 1
-        
-        # Check if we've reached max attempts
-        if (attempts > max_attempts) {
-          cli::cli_abort("Failed to acquire lock after {attempts} attempts")
-        }
-        
-        # Calculate wait time with exponential backoff and jitter
-        wait_time <- min(base_wait_time * 2^(attempts - 1), max_wait_time)
-        # Add random jitter (±20%)
-        jitter <- runif(1, 0.8, 1.2)
-        wait_time <- wait_time * jitter
-        
-        # Wait before retrying
-        Sys.sleep(wait_time)
+      # Use filelock to acquire a lock with timeout
+      lck <- filelock::lock(fs::path(private$log_path, ext = "lock"), timeout = 60000)
+      if (is.null(lck)) {
+        cli::cli_abort("Failed to acquire lock on event log file")
       }
+      return(lck)
     },
     
-    # Release lock
-    release_lock = function() {
-      if (fs::file_exists(private$log_lock)) {
-        tryCatch(
-          fs::file_delete(private$log_lock),
-          error = function(e) {
-            # If we can't delete the lock file, log a warning
-            cli::cli_warn("Failed to release lock: {e$message}")
-          }
-        )
+    # Release lock using filelock package
+    release_lock = function(lck) {
+      # Only attempt to unlock if we have a valid lock
+      if (!is.null(lck)) {
+        filelock::unlock(lck)
       }
     }
   )
