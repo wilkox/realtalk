@@ -1,9 +1,13 @@
 Package: realtalk
-Title: What the Package Does (One Line, Title Case)
+Title: Interface to the OpenAI Realtime API
 Version: 0.0.0.9000
 Authors@R: 
     person("David", "Wilkins", , "david@wilkox.org", role = c("aut", "cre"))
-Description: What the package does (one paragraph).
+Description: Provides tools for interacting with the OpenAI Realtime API.
+    Create streaming sessions with real-time text and audio input/output, 
+    handle events, and manage communication with the API through a WebSocket 
+    connection. The package supports bidirectional streaming of text and audio
+    content in real-time applications.
 License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
@@ -14,16 +18,20 @@ Imports:
     checkmate,
     cli,
     dplyr,
+    filelock,
+    fs,
+    glue,
     jsonlite,
     later,
     lemur,
     lubridate,
     purrr,
+    stringr,
     tibble,
-    tuneR,
     websocket
 Suggests: 
-    testthat (>= 3.0.0)
+    testthat (>= 3.0.0),
+    withr
 Config/testthat/edition: 3
 URL: https://github.com/wilkox/realtalk
 BugReports: https://github.com/wilkox/realtalk/issues

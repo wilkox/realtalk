@@ -65,6 +65,7 @@ capture_audio_chunk_file <- function(file, duration = 1, bitrate = 24000) {
 #' @param duration Duration in seconds to record (default 1 sec).
 #' @param bitrate Bitrate in Hz (default 24000)
 #' @return A base64-encoded string of the recorded audio.
+#'
 #' @export
 capture_audio_chunk_base64 <- function(duration = 1, bitrate = 24000) {
 
@@ -87,6 +88,7 @@ capture_audio_chunk_base64 <- function(duration = 1, bitrate = 24000) {
 #'
 #' @param audio_b64 A base64-encoded string representing audio.
 #' @param bitrate Bitrate in Hz (default 24000).
+#'
 #' @export
 play_audio_chunk <- function(audio_b64, bitrate = 24000) {
   audio_binary <- base64enc::base64decode(audio_b64)
