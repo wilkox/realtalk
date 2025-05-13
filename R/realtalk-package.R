@@ -12,6 +12,7 @@
 #' @author David Wilkins <david@wilkox.org>
 #'
 #' @import base64enc 
+#' @import callr
 #' @import checkmate 
 #' @import cli 
 #' @import dplyr 
@@ -20,8 +21,12 @@
 #' @import glue 
 #' @importFrom jsonlite fromJSON toJSON unbox
 #' @import later 
+#' @import lifecycle
 #' @import lubridate 
-#' @import purrr 
+#' @import ps
+#' @importFrom purrr map pmap pmap_lgl
+#' @import R6
+#' @importFrom rlang abort
 #' @import stringr 
 #' @import tibble
 #' @import websocket

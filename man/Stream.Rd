@@ -9,7 +9,11 @@ Represents a streaming session with the OpenAI Realtime API
 \section{Public fields}{
 \if{html}{\out{<div class="r6-fields">}}
 \describe{
-\item{\code{eventlog}}{The EventLog for the stream, an EventLog object
+\item{\code{eventlog}}{The EventLog for the stream, an EventLog object}
+
+\item{\code{logger}}{The Logger instance for structured logging}
+
+\item{\code{process_manager}}{The ProcessManager for monitoring background processes
 Add an entry to the log}
 }
 \if{html}{\out{</div>}}
@@ -27,6 +31,8 @@ Add an entry to the log}
 \item \href{#method-Stream-new}{\code{Stream$new()}}
 \item \href{#method-Stream-send_text}{\code{Stream$send_text()}}
 \item \href{#method-Stream-set_status_message}{\code{Stream$set_status_message()}}
+\item \href{#method-Stream-error_history}{\code{Stream$error_history()}}
+\item \href{#method-Stream-process_status}{\code{Stream$process_status()}}
 \item \href{#method-Stream-clone}{\code{Stream$clone()}}
 }
 }
@@ -205,9 +211,43 @@ after each assistant audio output message.}
 \subsection{Arguments}{
 \if{html}{\out{<div class="arguments">}}
 \describe{
-\item{\code{status_message}}{String, the status message to be set.}
+\item{\code{status_message}}{String, the status message to be set.
+Get error history for background processes}
 }
 \if{html}{\out{</div>}}
+}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-Stream-error_history"></a>}}
+\if{latex}{\out{\hypertarget{method-Stream-error_history}{}}}
+\subsection{Method \code{error_history()}}{
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{Stream$error_history(process_name = NULL)}\if{html}{\out{</div>}}
+}
+
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{process_name}}{Optional name of specific process; if NULL, returns
+error information for all processes}
+}
+\if{html}{\out{</div>}}
+}
+\subsection{Returns}{
+A list containing error information for the processes
+Get status of all background processes
+}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-Stream-process_status"></a>}}
+\if{latex}{\out{\hypertarget{method-Stream-process_status}{}}}
+\subsection{Method \code{process_status()}}{
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{Stream$process_status()}\if{html}{\out{</div>}}
+}
+
+\subsection{Returns}{
+A list containing status information for all managed processes
 }
 }
 \if{html}{\out{<hr>}}

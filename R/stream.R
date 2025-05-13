@@ -10,6 +10,12 @@ Stream <- R6::R6Class("Stream",
 
     #' @field eventlog The EventLog for the stream, an EventLog object
     eventlog = NULL,
+    
+    #' @field logger The Logger instance for structured logging
+    logger = NULL,
+    
+    #' @field process_manager The ProcessManager for monitoring background processes
+    process_manager = NULL,
 
     #' Add an entry to the log
     #'
@@ -752,6 +758,12 @@ Stream <- R6::R6Class("Stream",
         stderr = bg_stderr_file, # Use the files we created for better debugging
         stdout = bg_stdout_file
       ) # End of callr::r_bg call for main loop
+      
+      # Register the main background process with the process manager
+      self$process_manager$register_process(
+        process = private$bg_process,
+        name = "main_loop"
+      )
 
       # Wait until stream initiation signal received
       stream_ready_timer <- 0
@@ -920,6 +932,7 @@ Stream <- R6::R6Class("Stream",
     #' @return NULL, invisibly
     stop_streaming = function() {
 
+      self$logger$info("Stream", "Stopping streaming session")
       self$log("stop_streaming: called")
 
       # Touch the background close file
@@ -930,15 +943,34 @@ Stream <- R6::R6Class("Stream",
       shutdown_timeout <- 30
       shutdown_polling_interval <- 1
       cli::cli_alert_info("Shutting down stream...")
-      while (private$bg_process$is_alive()) {
+      
+      # Use process manager to check process status
+      process_status <- self$process_manager$check_process("main_loop")
+      
+      while (process_status$status == "running") {
         shutdown_timer <- shutdown_timer + shutdown_polling_interval
         if (shutdown_timer >= shutdown_timeout) {
+          self$logger$error(
+            "Stream", 
+            "Timed out waiting for shutdown", 
+            list(timeout = shutdown_timeout, elapsed = shutdown_timer)
+          )
           self$log(glue::glue("stop_streaming: timed out waiting for shutdown after {shutdown_timer} seconds"))
+          
+          # Force kill the process
+          process_status$process$kill()
+          self$logger$warning("Stream", "Forcefully killed main process")
+          
           cli::cli_abort("Timed out waiting for shutdown after {shutdown_timer} seconds")
         }
         Sys.sleep(shutdown_polling_interval)
+        
+        # Update process status
+        process_status <- self$process_manager$check_process("main_loop")
       }
+      
       cli::cli_alert_success("Stream shut down")
+      self$logger$info("Stream", "Stream shut down successfully")
       self$log("stop_streaming: stream shut down")
 
       # Remove the stream ready file with proper locking
@@ -966,10 +998,12 @@ Stream <- R6::R6Class("Stream",
       private$log_path <- fs::file_temp(pattern = "log", ext = "txt")
       fs::file_create(private$log_path)
       
-      # Since we can't modify the private$log_impl function directly due to locked bindings,
-      # we'll set the private path variable instead and use it in the log implementation
+      # Initialize the unified error handling system
+      self$logger <- Logger$new(log_path = private$log_path)
+      self$process_manager <- ProcessManager$new(logger = self$logger)
       
       # Log initialization
+      self$logger$info("Stream", "Stream object initialised")
       self$log("Stream object initialised")
 
       # Set signal file for stream ready
@@ -1076,6 +1110,22 @@ Stream <- R6::R6Class("Stream",
 
       # Update the status message field
       private$status_message <- status_message
+    },
+    
+    #' Get error history for background processes
+    #'
+    #' @param process_name Optional name of specific process; if NULL, returns
+    #' error information for all processes
+    #' @return A list containing error information for the processes
+    error_history = function(process_name = NULL) {
+      return(self$process_manager$get_error_history(process_name))
+    },
+    
+    #' Get status of all background processes
+    #'
+    #' @return A list containing status information for all managed processes
+    process_status = function() {
+      return(self$process_manager$check_processes())
     }
   ),
 
