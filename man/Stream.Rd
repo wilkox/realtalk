@@ -14,14 +14,13 @@ Represents a streaming session with the OpenAI Realtime API
 \item{\code{logger}}{The Logger instance for structured logging}
 
 \item{\code{process_manager}}{The ProcessManager for monitoring background processes
-Add an entry to the log}
+Wait until the current or next response is finished}
 }
 \if{html}{\out{</div>}}
 }
 \section{Methods}{
 \subsection{Public methods}{
 \itemize{
-\item \href{#method-Stream-log}{\code{Stream$log()}}
 \item \href{#method-Stream-wait_for_response}{\code{Stream$wait_for_response()}}
 \item \href{#method-Stream-conversation}{\code{Stream$conversation()}}
 \item \href{#method-Stream-transcript}{\code{Stream$transcript()}}
@@ -33,24 +32,8 @@ Add an entry to the log}
 \item \href{#method-Stream-set_status_message}{\code{Stream$set_status_message()}}
 \item \href{#method-Stream-error_history}{\code{Stream$error_history()}}
 \item \href{#method-Stream-process_status}{\code{Stream$process_status()}}
+\item \href{#method-Stream-view_log}{\code{Stream$view_log()}}
 \item \href{#method-Stream-clone}{\code{Stream$clone()}}
-}
-}
-\if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-Stream-log"></a>}}
-\if{latex}{\out{\hypertarget{method-Stream-log}{}}}
-\subsection{Method \code{log()}}{
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{Stream$log(entry)}\if{html}{\out{</div>}}
-}
-
-\subsection{Arguments}{
-\if{html}{\out{<div class="arguments">}}
-\describe{
-\item{\code{entry}}{The entry to be written to the log
-Wait until the current or next response is finished}
-}
-\if{html}{\out{</div>}}
 }
 }
 \if{html}{\out{<hr>}}
@@ -248,6 +231,35 @@ Get status of all background processes
 
 \subsection{Returns}{
 A list containing status information for all managed processes
+View logs for the stream
+
+Retrieves logs from the Logger instance, optionally filtered by level,
+component, or pattern.
+}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-Stream-view_log"></a>}}
+\if{latex}{\out{\hypertarget{method-Stream-view_log}{}}}
+\subsection{Method \code{view_log()}}{
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{Stream$view_log(level = NULL, component = NULL, pattern = NULL, n = NULL)}\if{html}{\out{</div>}}
+}
+
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{level}}{Optional log level to filter by: "INFO", "WARNING", or "ERROR"}
+
+\item{\code{component}}{Optional component name to filter by}
+
+\item{\code{pattern}}{Optional text pattern to search for in logs}
+
+\item{\code{n}}{Optional maximum number of log entries to return}
+}
+\if{html}{\out{</div>}}
+}
+\subsection{Returns}{
+A character vector of log entries
 }
 }
 \if{html}{\out{<hr>}}

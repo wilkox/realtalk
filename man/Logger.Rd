@@ -16,6 +16,7 @@ ERROR levels with component tagging and structured context data.
 \item \href{#method-Logger-warning}{\code{Logger$warning()}}
 \item \href{#method-Logger-error}{\code{Logger$error()}}
 \item \href{#method-Logger-log}{\code{Logger$log()}}
+\item \href{#method-Logger-get_log_path}{\code{Logger$get_log_path()}}
 \item \href{#method-Logger-get_logs}{\code{Logger$get_logs()}}
 \item \href{#method-Logger-clone}{\code{Logger$clone()}}
 }
@@ -136,6 +137,19 @@ Direct logging implementation
 }
 \subsection{Returns}{
 Invisibly returns NULL
+}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-Logger-get_log_path"></a>}}
+\if{latex}{\out{\hypertarget{method-Logger-get_log_path}{}}}
+\subsection{Method \code{get_log_path()}}{
+Get the path to the log file
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{Logger$get_log_path()}\if{html}{\out{</div>}}
+}
+
+\subsection{Returns}{
+The path to the log file
 }
 }
 \if{html}{\out{<hr>}}

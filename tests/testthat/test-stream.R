@@ -35,8 +35,9 @@ test_that("stream methods work correctly", {
   stream <- Stream$new()
   stream$start_streaming()
   
-  # Test logging
-  expect_no_error({ stream$log("This is a test log message") })
+  # Test logger is properly initialized
+  expect_s3_class(stream$logger, "Logger")
+  expect_no_error({ stream$logger$info("Test", "This is a test log message") })
   
   # Test eventlog
   expect_s3_class(stream$eventlog, "EventLog")

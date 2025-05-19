@@ -17,22 +17,6 @@ Stream <- R6::R6Class("Stream",
     #' @field process_manager The ProcessManager for monitoring background processes
     process_manager = NULL,
 
-    #' Add an entry to the log
-    #'
-    #' @param entry The entry to be written to the log
-    log = function(entry) {
-      # Since we can't modify private methods after initialization,
-      # we implement the logging logic directly here
-      if (! checkmate::qtest(entry, "S")) {
-        cli::cli_abort("Attempted to log a non-text entry")
-        print(entry)
-      }
-      entry <- glue::glue("[{realtalk::format_datetime()}] {entry}")
-      connection <- file(private$log_path, "at") # "at" is appending in text mode
-      writeLines(entry, connection)
-      close(connection)
-    },
-
     #' Wait until the current or next response is finished
     #'
     #' @param timeout Maximum time in seconds to wait before returning an
@@ -203,12 +187,12 @@ Stream <- R6::R6Class("Stream",
     ) {
 
       # Set up the background process
-      self$log("start_streaming: setting up background process for main loop")
+      self$logger$info("Stream", "setting up background process for main loop")
       # Create temporary files for stderr and stdout with descriptive names
       bg_stderr_file <- fs::file_temp(pattern = "bg_stderr_", ext = "log")
       bg_stdout_file <- fs::file_temp(pattern = "bg_stdout_", ext = "log")
-      self$log(glue::glue("start_streaming: using stderr file: {bg_stderr_file}"))
-      self$log(glue::glue("start_streaming: using stdout file: {bg_stdout_file}"))
+      self$logger$info("Stream", glue::glue("using stderr file: {bg_stderr_file}"))
+      self$logger$info("Stream", glue::glue("using stdout file: {bg_stdout_file}"))
       
       # Store the paths for later reference
       private$bg_stderr_file <- bg_stderr_file
@@ -753,7 +737,12 @@ Stream <- R6::R6Class("Stream",
           stream_ready_path = private$stream_ready_path,
           audio_out_buffer_path = private$audio_out_buffer_path,
           eventlog = self$eventlog,
-          log = self$log
+          log = function(message) {
+            # We need to implement a simple log function for the background process
+            # that will be used until we have better IPC between processes
+            cat(paste0(format(Sys.time(), "%Y-%m-%d %H:%M:%S"), " ", message, "\n"), 
+                file = file.path(tempdir(), "bg_process.log"), append = TRUE)
+          }
         ),
         stderr = bg_stderr_file, # Use the files we created for better debugging
         stdout = bg_stdout_file
@@ -770,7 +759,7 @@ Stream <- R6::R6Class("Stream",
       stream_ready_timeout <- 60
       stream_ready_polling_interval <- 1
       cli::cli_alert_info("Initialising stream...")
-      self$log("start_streaming: waiting for confirmation that stream is ready")
+      self$logger$info("Stream", "waiting for confirmation that stream is ready")
       
       # Track background process status
       stream_ready_lock_path <- fs::path(private$stream_ready_path, ext = "lock")
@@ -784,7 +773,7 @@ Stream <- R6::R6Class("Stream",
         }
         
         if (is_ready) {
-          self$log("start_streaming: detected stream ready signal")
+          self$logger$info("Stream", "detected stream ready signal")
           break
         }
         stream_ready_timer <- stream_ready_timer + stream_ready_polling_interval
@@ -792,17 +781,17 @@ Stream <- R6::R6Class("Stream",
         # Check if the background process is still alive
         if (! private$bg_process$is_alive()) {
           # Get the error information directly from the log files we created
-          self$log("start_streaming: background process died unexpectedly")
+          self$logger$info("Stream", "background process died unexpectedly")
           
           # Get exit status 
           exit_status <- tryCatch({
             private$bg_process$get_exit_status()
           }, error = function(e) {
-            self$log(glue::glue("start_streaming: could not get exit status: {e$message}"))
+            self$logger$info("Stream", glue::glue("could not get exit status: {e$message}"))
             return("unknown")
           })
           
-          self$log(glue::glue("start_streaming: background process exit status: {exit_status}"))
+          self$logger$info("Stream", glue::glue("background process exit status: {exit_status}"))
           
           # Read stderr and stdout from files
           stderr_output <- tryCatch({
@@ -817,7 +806,7 @@ Stream <- R6::R6Class("Stream",
               "stderr file does not exist"
             }
           }, error = function(e) {
-            self$log(glue::glue("start_streaming: error reading stderr file: {e$message}"))
+            self$logger$info("Stream", glue::glue("error reading stderr file: {e$message}"))
             return("Error reading stderr")
           })
           
@@ -833,13 +822,13 @@ Stream <- R6::R6Class("Stream",
               "stdout file does not exist"
             }
           }, error = function(e) {
-            self$log(glue::glue("start_streaming: error reading stdout file: {e$message}"))
+            self$logger$info("Stream", glue::glue("error reading stdout file: {e$message}"))
             return("Error reading stdout")
           })
           
           # Log the outputs
-          self$log(glue::glue("start_streaming: stderr output: {stderr_output}"))
-          self$log(glue::glue("start_streaming: stdout output: {stdout_output}"))
+          self$logger$info("Stream", glue::glue("stderr output: {stderr_output}"))
+          self$logger$info("Stream", glue::glue("stdout output: {stdout_output}"))
           
           # Try to determine if this is an API issue
           api_error <- FALSE
@@ -880,13 +869,13 @@ Stream <- R6::R6Class("Stream",
             "Failed to check API status"
           })
           
-          self$log(glue::glue("start_streaming: timed out waiting for stream to initialise after {stream_ready_timeout} seconds"))
-          self$log(glue::glue("start_streaming: API status: {api_status}"))
+          self$logger$info("Stream", glue::glue("timed out waiting for stream to initialise after {stream_ready_timeout} seconds"))
+          self$logger$info("Stream", glue::glue("API status: {api_status}"))
           
           # Force kill the background process if it's still running
           if (private$bg_process$is_alive()) {
             private$bg_process$kill()
-            self$log("start_streaming: killed background process")
+            self$logger$info("Stream", "killed background process")
           }
           
           cli::cli_abort(c(
@@ -902,7 +891,7 @@ Stream <- R6::R6Class("Stream",
       }
       
       cli::cli_alert_success("Stream initialised")
-      self$log("start_streaming: stream initialised")
+      self$logger$info("Stream", "stream initialised")
     },
 
     #' Report whether the stream is ready
@@ -914,7 +903,7 @@ Stream <- R6::R6Class("Stream",
       ready_lock <- filelock::lock(stream_ready_lock_path, timeout = 1000)
       
       if (is.null(ready_lock)) {
-        self$log("is_ready: failed to acquire lock to check stream ready status")
+        self$logger$info("Stream", "failed to acquire lock to check stream ready status")
         return(FALSE)
       }
       
@@ -933,7 +922,7 @@ Stream <- R6::R6Class("Stream",
     stop_streaming = function() {
 
       self$logger$info("Stream", "Stopping streaming session")
-      self$log("stop_streaming: called")
+      self$logger$info("Stream", "stop_streaming called")
 
       # Touch the background close file
       fs::file_touch(private$bg_close_path)
@@ -955,7 +944,7 @@ Stream <- R6::R6Class("Stream",
             "Timed out waiting for shutdown", 
             list(timeout = shutdown_timeout, elapsed = shutdown_timer)
           )
-          self$log(glue::glue("stop_streaming: timed out waiting for shutdown after {shutdown_timer} seconds"))
+          self$logger$info("Stream", glue::glue("timed out waiting for shutdown after {shutdown_timer} seconds"))
           
           # Force kill the process
           process_status$process$kill()
@@ -971,7 +960,7 @@ Stream <- R6::R6Class("Stream",
       
       cli::cli_alert_success("Stream shut down")
       self$logger$info("Stream", "Stream shut down successfully")
-      self$log("stop_streaming: stream shut down")
+      self$logger$info("Stream", "stream shut down")
 
       # Remove the stream ready file with proper locking
       stream_ready_lock_path <- fs::path(private$stream_ready_path, ext = "lock")
@@ -979,11 +968,11 @@ Stream <- R6::R6Class("Stream",
       if (!is.null(ready_lock)) {
         if (fs::file_exists(private$stream_ready_path)) {
           fs::file_delete(private$stream_ready_path)
-          self$log("stop_streaming: removed stream ready signal with lock protection")
+          self$logger$info("Stream", "removed stream ready signal with lock protection")
         }
         filelock::unlock(ready_lock)
       } else {
-        self$log("stop_streaming: could not acquire lock to remove stream ready signal")
+        self$logger$info("Stream", "could not acquire lock to remove stream ready signal")
       }
 
     },
@@ -993,51 +982,49 @@ Stream <- R6::R6Class("Stream",
     #' @param tmux_split Logical, whether to open the log file in a new tmux
     #' split. Defaults to FALSE.
     initialize = function(tmux_split = FALSE) {
-
-      # Set up the local log file
-      private$log_path <- fs::file_temp(pattern = "log", ext = "txt")
-      fs::file_create(private$log_path)
+      # Create a temporary log file path for the Logger
+      log_path <- fs::file_temp(pattern = "log", ext = "txt")
+      fs::file_create(log_path)
       
       # Initialize the unified error handling system
-      self$logger <- Logger$new(log_path = private$log_path)
+      self$logger <- Logger$new(log_path = log_path)
       self$process_manager <- ProcessManager$new(logger = self$logger)
       
       # Log initialization
       self$logger$info("Stream", "Stream object initialised")
-      self$log("Stream object initialised")
 
       # Set signal file for stream ready
       private$stream_ready_path <- fs::file_temp(pattern = "stream_ready")
-      self$log(glue::glue("stream_ready_path set to {private$stream_ready_path}"))
+      self$logger$info("Stream", glue::glue("stream_ready_path set to {private$stream_ready_path}"))
 
       # Set the background close file path
       private$bg_close_path <- fs::file_temp(pattern = "background_close_signal")
-      self$log(glue::glue("bg_close_path is {private$bg_close_path}"))
+      self$logger$info("Stream", glue::glue("bg_close_path is {private$bg_close_path}"))
 
       # Set the text input buffer file path
       private$text_in_path <- fs::file_temp(pattern = "text_in_buffer", ext = "rds")
       text_in <- tibble::tibble(role = character(0), trigger_response = logical(0), text = character(0))
       saveRDS(text_in, private$text_in_path)
-      self$log(glue::glue("text_in_path is {private$text_in_path}"))
+      self$logger$info("Stream", glue::glue("text_in_path is {private$text_in_path}"))
 
       # Set the status message buffer file path
       private$status_message_path <- fs::file_temp(pattern = "status_message", ext = "rds")
       status_message <- NA_character_
       saveRDS(status_message, private$status_message_path)
-      self$log(glue::glue("status_message_path is {private$status_message_path}"))
+      self$logger$info("Stream", glue::glue("status_message_path is {private$status_message_path}"))
 
       # Set the audio out buffer path and initialise the buffer file
       private$audio_out_buffer_path <- fs::file_temp(pattern = "audio_out", ext = "txt")
       fs::file_create(private$audio_out_buffer_path)
-      self$log(glue::glue("audio_out_buffer_path is {private$audio_out_buffer_path}"))
+      self$logger$info("Stream", glue::glue("audio_out_buffer_path is {private$audio_out_buffer_path}"))
 
       cli::cli_alert_success("Stream created")
       cli::cli_alert_info("Call {.fun start_streaming} to connect to the API and commence audio and text streaming")
 
       # Set up the logfile
-      while (! fs::file_exists(private$log_path) ) { Sys.sleep(0.01) }
+      log_path <- self$logger$get_log_path()
       cli::cli_alert_info("Logfile path is:")
-      cli::cli_text(private$log_path)
+      cli::cli_text(log_path)
 
       # Set up the tmux split
       if (tmux_split) {
@@ -1046,7 +1033,7 @@ Stream <- R6::R6Class("Stream",
           "split-window",
           "-v",
           "-p", "33",
-          glue::glue("tail -f {private$log_path}"),
+          glue::glue("tail -f {log_path}"),
           ";", "tmux", "last-pane"
         ))
       }
@@ -1067,7 +1054,7 @@ Stream <- R6::R6Class("Stream",
       # Get a lock on the text input buffer file
       lck <- filelock::lock(fs::path(private$text_in_path, ext = "lock"), timeout = 60000)
       if (is.null(lck)) {
-        self$log("Failed to acquire lock on text input buffer file")
+        self$logger$info("Stream", "Failed to acquire lock on text input buffer file")
         cli::cli_abort("Failed to acquire lock on text input buffer file")
       }
       
@@ -1078,7 +1065,7 @@ Stream <- R6::R6Class("Stream",
         text_in <- dplyr::bind_rows(text_in, new_text)
         saveRDS(text_in, private$text_in_path)
       }, error = function(e) {
-        self$log(glue::glue("Error while processing text buffer: {e$message}"))
+        self$logger$info("Stream", glue::glue("Error while processing text buffer: {e$message}"))
         cli::cli_abort("Error while processing text buffer: {e$message}")
       }, finally = {
         # Relinquish the lock
@@ -1098,7 +1085,7 @@ Stream <- R6::R6Class("Stream",
       # Get a lock on the status message file
       lck <- filelock::lock(fs::path(private$status_message_path, ext = "lock"), timeout = 60000)
       if (is.null(lck)) {
-        log("Failed to acquire lock to update status message file")
+        self$logger$info("Stream", "Failed to acquire lock to update status message file")
         cli::cli_abort("Failed to acquire to update status message file")
       }
 
@@ -1126,11 +1113,30 @@ Stream <- R6::R6Class("Stream",
     #' @return A list containing status information for all managed processes
     process_status = function() {
       return(self$process_manager$check_processes())
+    },
+    
+    #' View logs for the stream
+    #'
+    #' Retrieves logs from the Logger instance, optionally filtered by level, 
+    #' component, or pattern.
+    #'
+    #' @param level Optional log level to filter by: "INFO", "WARNING", or "ERROR"
+    #' @param component Optional component name to filter by
+    #' @param pattern Optional text pattern to search for in logs
+    #' @param n Optional maximum number of log entries to return
+    #'
+    #' @return A character vector of log entries
+    view_log = function(level = NULL, component = NULL, pattern = NULL, n = NULL) {
+      if (is.null(self$logger)) {
+        cli::cli_warn("Logger not initialized")
+        return(character(0))
+      }
+      
+      return(self$logger$get_logs(level = level, component = component, pattern = pattern, n = n))
     }
   ),
 
   private = list(
-
     # The callr background R process in which the websocket and streaming loops
     # are instantiated
     bg_process = NULL,
@@ -1154,13 +1160,16 @@ Stream <- R6::R6Class("Stream",
 
     # Path to file in which the status message will be buffered
     status_message_path = NULL,
-
-    # Path to the local log file (as distinct from the stream EventLog)
-    log_path = NULL,
     
     # Path to the stdout and stderr files for the background process
     bg_stdout_file = NULL,
-    bg_stderr_file = NULL
-
+    bg_stderr_file = NULL,
+    
+    # Legacy log function for backwards compatibility during transition
+    log = function(message) {
+      if (!is.null(self$logger)) {
+        self$logger$info("Stream", message)
+      }
+    }
   )
 )

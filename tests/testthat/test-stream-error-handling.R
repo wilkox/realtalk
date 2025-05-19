@@ -169,3 +169,49 @@ test_that("Stream can attempt recovery for failed processes", {
   status_after_recovery$test_recovery$process$kill()
   stream$stop_streaming()
 })
+
+test_that("Stream provides view_log method to access logs", {
+  testthat::skip_on_ci()
+  
+  stream <- Stream$new()
+  
+  # Add some log entries
+  stream$logger$info("TestComponent", "Test info message")
+  stream$logger$warning("TestComponent", "Test warning message")
+  stream$logger$error("TestComponent", "Test error message")
+  
+  # Test view_log with no filters
+  logs <- stream$view_log()
+  expect_true(length(logs) >= 3)
+  
+  # Test filtering by level
+  info_logs <- stream$view_log(level = "INFO")
+  expect_true(length(info_logs) >= 1)
+  expect_true(all(grepl("\\[INFO\\]", info_logs)))
+  
+  warning_logs <- stream$view_log(level = "WARNING")
+  expect_true(length(warning_logs) >= 1)
+  expect_true(all(grepl("\\[WARNING\\]", warning_logs)))
+  
+  error_logs <- stream$view_log(level = "ERROR")
+  expect_true(length(error_logs) >= 1)
+  expect_true(all(grepl("\\[ERROR\\]", error_logs)))
+  
+  # Test filtering by component
+  component_logs <- stream$view_log(component = "TestComponent")
+  expect_true(length(component_logs) >= 3)
+  expect_true(all(grepl("\\[TestComponent\\]", component_logs)))
+  
+  # Test filtering by pattern
+  pattern_logs <- stream$view_log(pattern = "Test.*message")
+  expect_true(length(pattern_logs) >= 3)
+  
+  # Test limit
+  limited_logs <- stream$view_log(n = 2)
+  expect_equal(length(limited_logs), 2)
+  
+  # Test combined filters
+  combined_logs <- stream$view_log(level = "INFO", component = "TestComponent", pattern = "info")
+  expect_true(length(combined_logs) >= 1)
+  expect_true(all(grepl("\\[INFO\\].*\\[TestComponent\\].*info", combined_logs)))
+})
