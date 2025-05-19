@@ -120,6 +120,14 @@ Logger <- R6::R6Class("Logger",
     },
     
     #' @description
+    #' Get the path to the log file
+    #'
+    #' @return The path to the log file
+    get_log_path = function() {
+      return(private$log_path)
+    },
+    
+    #' @description
     #' Retrieve filtered log entries
     #'
     #' @param level Optional level to filter by (INFO, WARNING, ERROR)
