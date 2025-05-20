@@ -7,6 +7,7 @@
 #'
 #' @export
 Logger <- R6::R6Class("Logger",
+
   public = list(
     #' @description
     #' Create a new Logger
@@ -14,7 +15,13 @@ Logger <- R6::R6Class("Logger",
     #' @param log_path Path to the log file
     #'
     #' @return A new Logger object
-    initialize = function(log_path) {
+    initialize = function(log_path = NULL) {
+
+      # If no log_path has been provided, generate one
+      if (is.null(log_path)) {
+        log_path <- fs::file_temp(pattern = "log", ext = "txt")
+      }
+
       # Validate inputs
       checkmate::assert_string(log_path, min.chars = 1)
       

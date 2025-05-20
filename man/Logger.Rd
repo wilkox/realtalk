@@ -27,7 +27,7 @@ ERROR levels with component tagging and structured context data.
 \subsection{Method \code{new()}}{
 Create a new Logger
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{Logger$new(log_path)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{Logger$new(log_path = NULL)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
