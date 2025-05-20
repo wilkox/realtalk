@@ -41,13 +41,6 @@ The main class in `realtalk` is `Stream`, which represents a streaming session w
 stream <- Stream$new()
 ```
 
-You can also create a Stream with a tmux split to help debug:
-
-```{r}
-# Create a Stream with a tmux split showing the log
-stream <- Stream$new(tmux_split = TRUE)
-```
-
 ## Starting a Stream
 
 Once you've created a Stream object, you need to start the streaming session:

@@ -137,25 +137,20 @@ Disconnects from the API and shuts down background I/O processes.
 
 \subsection{Returns}{
 NULL, invisibly
-Set up a new Stream
 }
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-Stream-new"></a>}}
 \if{latex}{\out{\hypertarget{method-Stream-new}{}}}
 \subsection{Method \code{new()}}{
+Create a new Stream object
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{Stream$new(tmux_split = FALSE)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{Stream$new()}\if{html}{\out{</div>}}
 }
 
-\subsection{Arguments}{
-\if{html}{\out{<div class="arguments">}}
-\describe{
-\item{\code{tmux_split}}{Logical, whether to open the log file in a new tmux
-split. Defaults to FALSE.
-Send a text message to the stream}
-}
-\if{html}{\out{</div>}}
+\subsection{Returns}{
+a Stream object
+Send a text message to the stream
 }
 }
 \if{html}{\out{<hr>}}

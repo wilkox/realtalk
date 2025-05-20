@@ -977,11 +977,12 @@ Stream <- R6::R6Class("Stream",
 
     },
 
-    #' Set up a new Stream
+    #' @description
+    #' Create a new Stream object
     #'
-    #' @param tmux_split Logical, whether to open the log file in a new tmux
-    #' split. Defaults to FALSE.
-    initialize = function(tmux_split = FALSE) {
+    #' @return a Stream object
+    initialize = function() {
+
       # Create a temporary log file path for the Logger
       log_path <- fs::file_temp(pattern = "log", ext = "txt")
       fs::file_create(log_path)
@@ -1025,18 +1026,6 @@ Stream <- R6::R6Class("Stream",
       log_path <- self$logger$get_log_path()
       cli::cli_alert_info("Logfile path is:")
       cli::cli_text(log_path)
-
-      # Set up the tmux split
-      if (tmux_split) {
-        cli::cli_alert_info("Logfile split should open below")
-        system2("tmux", args = c(
-          "split-window",
-          "-v",
-          "-p", "33",
-          glue::glue("tail -f {log_path}"),
-          ";", "tmux", "last-pane"
-        ))
-      }
 
       # Initialise the event log
       self$eventlog <- EventLog$new()
