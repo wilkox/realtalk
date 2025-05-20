@@ -145,9 +145,16 @@ NULL, invisibly
 \subsection{Method \code{new()}}{
 Create a new Stream object
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{Stream$new()}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{Stream$new(.quiet = FALSE)}\if{html}{\out{</div>}}
 }
 
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{.quiet}}{If TRUE, suppress startup messages}
+}
+\if{html}{\out{</div>}}
+}
 \subsection{Returns}{
 a Stream object
 Send a text message to the stream

@@ -986,8 +986,9 @@ Stream <- R6::R6Class("Stream",
     #' @description
     #' Create a new Stream object
     #'
+    #' @param .quiet If TRUE, suppress startup messages
     #' @return a Stream object
-    initialize = function() {
+    initialize = function(.quiet = FALSE) {
 
       # Create a temporary log file path for the Logger
       log_path <- fs::file_temp(pattern = "log", ext = "txt")
@@ -1025,8 +1026,10 @@ Stream <- R6::R6Class("Stream",
       fs::file_create(private$audio_out_buffer_path)
       self$logger$info("Stream", glue::glue("audio_out_buffer_path is {private$audio_out_buffer_path}"))
 
-      cli::cli_alert_success("Stream created")
-      cli::cli_alert_info("Call {.fun start_streaming} to connect to the API and commence audio and text streaming")
+      if (! .quiet) {
+        cli::cli_alert_success("Stream created")
+        cli::cli_alert_info("Call {.fun start_streaming} to connect to the API and commence audio and text streaming")
+      }
 
       # Set up the logfile
       log_path <- self$logger$get_log_path()
