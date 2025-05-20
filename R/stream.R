@@ -722,6 +722,10 @@ Stream <- R6::R6Class("Stream",
 
           } # End of main streaming loop
 
+          # Shut down background processes
+          if (audio_out_bg$is_alive()) k <- audio_out_bg$kill()
+          if (sox_bg$is_alive()) k <- sox_bg$kill()
+
           cli::cli_alert_info("Main streaming loop ended")
           log("Main loop ended")
           return(eventlog)
@@ -975,6 +979,8 @@ Stream <- R6::R6Class("Stream",
         self$logger$info("Stream", "could not acquire lock to remove stream ready signal")
       }
 
+      invisible(self)
+
     },
 
     #' @description
@@ -1024,8 +1030,6 @@ Stream <- R6::R6Class("Stream",
 
       # Set up the logfile
       log_path <- self$logger$get_log_path()
-      cli::cli_alert_info("Logfile path is:")
-      cli::cli_text(log_path)
 
       # Initialise the event log
       self$eventlog <- EventLog$new()
