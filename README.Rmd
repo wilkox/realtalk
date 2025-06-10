@@ -27,7 +27,7 @@ knitr::opts_chunk$set(
 
 `realtalk` is an R package for interacting with the OpenAI Realtime API. It provides functionality for bidirectional streaming of text and audio to and from the OpenAI API.
 
-**Note**: This package is primarily developed for personal use but is being shared in case others find it useful. It is in early development (version 0.1.0) and the API may change.
+**Note**: This package is primarily developed for personal use but is being shared in case others find it useful. It is in early development and the API may change.
 
 ## Installation
 
@@ -58,7 +58,7 @@ stream <- Stream$new()
 # Start streaming with your API key and preferred model
 stream$start_streaming(
   api_key = Sys.getenv("OPENAI_API_KEY"), # Default is openai_api_key()
-  model = "gpt-4o-realtime-preview-2024-12-17",
+  model = "gpt-4o-realtime-preview-2025-06-03",
   voice = "ballad" # Choose from available OpenAI TTS voices
 )
 ```

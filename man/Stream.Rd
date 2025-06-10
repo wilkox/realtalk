@@ -91,7 +91,7 @@ managed by background processes.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{Stream$start_streaming(
   api_key = openai_api_key(verbose = FALSE),
-  model = "gpt-4o-realtime-preview-2024-12-17",
+  model = "gpt-4o-realtime-preview-2025-06-03",
   voice = "ballad"
 )}\if{html}{\out{</div>}}
 }
@@ -103,7 +103,7 @@ managed by background processes.
 \code{openai_api_key(verbose = FALSE)}.}
 
 \item{\code{model}}{A string specifying the model. Defaults to
-\code{"gpt-4o-realtime-preview-2024-12-17"}.}
+\code{"gpt-4o-realtime-preview-2025-06-03"}.}
 
 \item{\code{voice}}{A string specifying the voice to use. Defaults to "ballad".
 

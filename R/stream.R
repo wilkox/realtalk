@@ -177,12 +177,12 @@ Stream <- R6::R6Class("Stream",
     #' @param api_key Your long-term OpenAI API key. Defaults to
     #' `openai_api_key(verbose = FALSE)`.
     #' @param model A string specifying the model. Defaults to
-    #' `"gpt-4o-realtime-preview-2024-12-17"`.
+    #' `"gpt-4o-realtime-preview-2025-06-03"`.
     #' @param voice A string specifying the voice to use. Defaults to "ballad".
     #' 
     start_streaming = function(
       api_key = openai_api_key(verbose = FALSE),
-      model = "gpt-4o-realtime-preview-2024-12-17",
+      model = "gpt-4o-realtime-preview-2025-06-03",
       voice = "ballad"
     ) {
 
