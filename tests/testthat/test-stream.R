@@ -68,3 +68,12 @@ test_that("stream methods work correctly", {
   # Clean up
   stream$stop_streaming()
 })
+
+test_that("get_status_message_path returns path string", {
+  stream <- Stream$new(.quiet = TRUE)
+  
+  path <- stream$get_status_message_path()
+  expect_type(path, "character")
+  expect_length(path, 1)
+  expect_true(grepl("status_message.*\\.rds$", path))
+})

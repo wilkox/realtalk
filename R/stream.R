@@ -1129,6 +1129,17 @@ Stream <- R6::R6Class("Stream",
       }
       
       return(self$logger$get_logs(level = level, component = component, pattern = pattern, n = n))
+    },
+
+    #' Get the status message file path
+    #'
+    #' Returns the path to the temporary file where status messages are stored.
+    #' This file is used for communication between the main thread and background
+    #' processes.
+    #'
+    #' @return A character string with the path to the status message file
+    get_status_message_path = function() {
+      return(private$status_message_path)
     }
   ),
 

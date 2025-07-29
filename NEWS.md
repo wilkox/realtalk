@@ -1,6 +1,7 @@
 # realtalk (development version)
 
 - Update realtalk model to gpt-4o-realtime-preview-2025-06-03
+- Add `get_status_message_path()` method to Stream class
 
 # realtalk 0.1.0
 

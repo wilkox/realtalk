@@ -33,6 +33,7 @@ Wait until the current or next response is finished}
 \item \href{#method-Stream-error_history}{\code{Stream$error_history()}}
 \item \href{#method-Stream-process_status}{\code{Stream$process_status()}}
 \item \href{#method-Stream-view_log}{\code{Stream$view_log()}}
+\item \href{#method-Stream-get_status_message_path}{\code{Stream$get_status_message_path()}}
 \item \href{#method-Stream-clone}{\code{Stream$clone()}}
 }
 }
@@ -262,6 +263,23 @@ component, or pattern.
 }
 \subsection{Returns}{
 A character vector of log entries
+Get the status message file path
+
+Returns the path to the temporary file where status messages are stored.
+This file is used for communication between the main thread and background
+processes.
+}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-Stream-get_status_message_path"></a>}}
+\if{latex}{\out{\hypertarget{method-Stream-get_status_message_path}{}}}
+\subsection{Method \code{get_status_message_path()}}{
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{Stream$get_status_message_path()}\if{html}{\out{</div>}}
+}
+
+\subsection{Returns}{
+A character string with the path to the status message file
 }
 }
 \if{html}{\out{<hr>}}
